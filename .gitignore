@@ -1,0 +1,19 @@
+node_modules/
+.venv/
+.env
+frames/
+temp/
+# Generated output
+output/
+
+# Transcription cache
+cache/
+
+# Temp files
+temp/
+.DS_Store
+
+# Audio/video source files
+*.mp3
+*.wav
+*.mp4
