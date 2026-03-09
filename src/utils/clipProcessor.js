@@ -41,29 +41,13 @@ async function runPython(script, args = []) {
 }
 
 export default async function clipProcessor(mainIdea, videoId) {
+    const checkScript = path.join(__dirname, "checkFrames.py");
 
-    const embeddingsPath = path.join(
-        process.cwd(),
-        "embeddings",
-        `${videoId}.npy`
-    );
-
-    const generateScript = path.join(__dirname, "generateEmbeddings.py");
-    const searchScript = path.join(__dirname, "searchEmbeddings.py");
-
-    if (!fs.existsSync(embeddingsPath)) {
-        console.log("Embeddings not found. Generating...");
-        await runPython(generateScript, [videoId]);
-        console.log("Embeddings generated");
-
-    }
-    // 2️⃣ Buscar usando embeddings
-    console.log("Searching for embeddings...");
-    const scores = await runPython(searchScript, [
+    console.log("Checking frames for main idea: ", mainIdea);
+    const scores = await runPython(checkScript, [
         mainIdea,
         videoId
     ]);
-    console.log("Scores found");
 
     return scores;
 }

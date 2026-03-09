@@ -32,10 +32,18 @@ export const getVideos = async (mainIdeasOriginal) => {
         const cachedResults = JSON.parse(fs.readFileSync('./cache/results.json', 'utf8'));
         results = cachedResults;
     } else {
+        let promises = [];
         for (let index = 0; index < mainIdeas.length; index++) {
             const mainIdea = mainIdeas[index];
-            const result = await chooseVideoFromYoutube(mainIdea.text, usedVideosIds);
-            results.push(result);
+            console.log('-> Working on main idea: ', mainIdea.text, '(', index + 1, 'of', mainIdeas.length, ')')
+            promises.push(chooseVideoFromYoutube(mainIdea.text, usedVideosIds));
+
+            const isLastIteration = index === mainIdeas.length - 1;
+            if (promises.length === 3 || isLastIteration) {
+                const resultsFromPromises = await Promise.all(promises);
+                results.push(...resultsFromPromises);
+                promises = [];
+            }
         }
         fs.writeFileSync('./cache/results.json', JSON.stringify(results, null, 2));
     }
@@ -143,8 +151,10 @@ export const chooseVideoFromYoutube = async (mainIdea, usedVideosIds = []) => {
     do {
         const processedMainIdeas = await workMainIdeas(mainIdea, tooHard);
         for (let processedMainIdea of processedMainIdeas) {
+            console.log('--> Checking videos for processed idea: ', processedMainIdea)
             const { videoId, tooHard: too_hard } = await checkVideosForMainIdea(processedMainIdea, usedVideosIds, tooHard);
             if (videoId) {
+                console.log('--> Video found:', videoId)
                 usedVideosIds.push(videoId);
                 return { videoId, tooHard: too_hard };
             }
@@ -171,6 +181,7 @@ const checkVideosForMainIdea = async (processedMainIdea, usedVideosIds = [], too
         return { videoId: null, tooHard: true };
     }
     for (let item of results) {
+        console.log('----> Checking item: ', getYoutubeVideoUrl(item.id))
         const result = await checkResultItemForMainIdea(processedMainIdea, item, usedVideosIds);
         const id = result?.videoId ?? result;
         if (id && typeof id === "string") {
@@ -268,11 +279,27 @@ const getRandomFramesOfAVideo = async (videoPath, videoId) => {
         fs.mkdirSync('./frames');
     }
     if (!fs.existsSync(framesFolder)) fs.mkdirSync(framesFolder);
-    await getFramesFromVideo(videoPath, framesFolder, "select='gt(scene,0.4)'");
+    // await getFramesFromVideo(videoPath, framesFolder, "select='gt(scene,0.4)'");
 
-    if (fs.readdirSync(framesFolder).length === 0) {
-        await getFramesFromVideo(videoPath, framesFolder, "fps=1/2");
+
+    const videoDuration = await getVideoDuration(videoPath);
+    const minutes = videoDuration / 60;
+    console.log("Video duration: ", minutes);
+
+    let selectQuery;
+
+    if (minutes > 10) {
+        selectQuery = "fps=1/20";
+    } else if (minutes > 5 && minutes < 10) {
+        selectQuery = "fps=1/15";
+    } else if (minutes > 3 && minutes < 5) {
+        selectQuery = "fps=1/10";
+    } else if (minutes > 1 && minutes < 3) {
+        selectQuery = "fps=1/5";
+    } else {
+        selectQuery = "fps=1";
     }
+    await getFramesFromVideo(videoPath, framesFolder, selectQuery);
 };
 
 const getFramesFromVideo = async (videoPath, framesFolder, filter = "select='gt(scene,0.3)'") => {
