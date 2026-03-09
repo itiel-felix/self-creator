@@ -8,7 +8,7 @@ import clipProcessor from "../utils/clipProcessor.js";
 import fs from 'fs';
 import ffmpeg from "fluent-ffmpeg";
 
-// Wee are using 2 types of start time
+// We are using 2 types of start time
 // 1. The start time of the main idea, it means, the time that the idea should be shown in the final video
 // 2. The start time of the video selected
 export const getVideos = async (mainIdeasOriginal) => {

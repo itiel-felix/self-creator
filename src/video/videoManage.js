@@ -15,15 +15,11 @@ const OUTPUT_HEIGHT = 1080;
  * @param {'full'|'top_half'|'bottom_half'} layout
  * @returns {string[]} filtros para videoFilters()
  */
-function getVideoFiltersForLayout(layout) {
-    switch (layout) {
-        case 'full':
-        default:
-            return [
-                `scale=${OUTPUT_WIDTH}:${OUTPUT_HEIGHT}:force_original_aspect_ratio=increase`,
-                `crop=${OUTPUT_WIDTH}:${OUTPUT_HEIGHT}`
-            ];
-    }
+function getVideoFiltersForLayout() {
+    return [
+        `scale=${OUTPUT_WIDTH}:${OUTPUT_HEIGHT}:force_original_aspect_ratio=increase`,
+        `crop=${OUTPUT_WIDTH}:${OUTPUT_HEIGHT}`
+    ];
 }
 
 /**
@@ -31,10 +27,9 @@ function getVideoFiltersForLayout(layout) {
  * @param {Object[]} videos - Array of { video_path, final_duration, start_time, end_time, text }
  * @param {string} outputFile - Output file path
  * @param {string} audioPath - Original audio to overlay
- * @param {{ layout?: 'full'|'top_half'|'bottom_half' }} [options] - layout: 'full' (toda la pantalla), 'top_half' (mitad superior), 'bottom_half' (mitad inferior). Por env: VIDEO_LAYOUT
  */
 export const cutAndConcatSegments = async (videos, outputFile) => {
-    const videoFilters = getVideoFiltersForLayout('full');
+    const videoFilters = getVideoFiltersForLayout();
 
     const tempFiles = [];
     const tempFolder = './temp';
