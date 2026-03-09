@@ -33,6 +33,13 @@ const getStartAndEndTimeFromVideoId = (videoId, duration) => {
         end_time: endTime
     }
 }
+
+const initializeCache = () => {
+    if (!fs.existsSync('./cache')) fs.mkdirSync('./cache');
+    if (!fs.existsSync('./cache/frame_info.json')) fs.writeFileSync('./cache/frame_info.json', '{}');
+    if (!fs.existsSync('./temp')) fs.mkdirSync('./temp');
+    if (!fs.existsSync('./temp/youtube')) fs.mkdirSync('./temp/youtube');
+}
 export {
     isVideoVertical,
     createVideoUrl,

@@ -5,13 +5,16 @@ import fs from "fs";
 import { transcribeAudioWhisperX } from "./src/services/replicate.service.js";
 import { getMainIdea } from "./src/services/deepSeek.service.js";
 import { getVideos } from "./src/video/videoUtils.js";
-import { cutAndMergeSegments, addBurnedInASSSubtitles } from "./src/video/videoManage.js";
+import { cutAndConcatSegments, addBurnedInASSSubtitles, mergeSegmentsToVerticalScreen } from "./src/video/videoManage.js";
 import { generateASS, generateSRT } from "./src/subtitles/subtitle.service.js";
+import { getVideoDuration } from "./src/video/videoUtils.js";
+import subwaySurfers from "./src/video/subwaySurfers.js";
+import { cropVideoToDuration } from "./src/video/videoManage.js";
+import { initializeCache } from "./src/utils.js";
 (async () => {
     // int settings
-    if (!fs.existsSync('./temp')) fs.mkdirSync('./temp');
-    if (!fs.existsSync('./temp/youtube')) fs.mkdirSync('./temp/youtube');
     const start = Date.now();
+    initializeCache();
     try {
         const audioPath = process.argv[2];
         if (!audioPath) throw new Error("Usage: node index.js <audio-file>");
@@ -32,7 +35,7 @@ import { generateASS, generateSRT } from "./src/subtitles/subtitle.service.js";
         console.log('<--- TRANSCRIPTION DONE --->');
 
         // Part 2: Generate subtitles
-        const subtitlesPath = 'output/subtitles.ass';
+        const subtitlesPath = './output/subtitles.ass';
         if (!fs.existsSync(subtitlesPath)) {
             const allWords = segments.flatMap(s => s.words ?? []);
             fs.writeFileSync(subtitlesPath, generateASS(allWords));
@@ -56,21 +59,46 @@ import { generateASS, generateSRT } from "./src/subtitles/subtitle.service.js";
         console.log('<--- VIDEOS DOWNLOADED --->');
 
         // Part 5: Merge videos with audio
-        const mergedPath = 'output/merged_video.mp4';
-        await cutAndMergeSegments(videos, mergedPath, audioPath);
+        const mergedPath = './output/merged_video.mp4';
+        const mergedVideoPath = await cutAndConcatSegments(videos, mergedPath);
+        const mergedVideoLenght = await getVideoDuration(mergedVideoPath);
+
         console.log('<--- VIDEO MERGED --->');
 
         // Part 6: Download subway surfers video
-        await subwaySurfers();
+        const subwaySurfersVideoPath = await subwaySurfers(mergedVideoLenght);
+        await cropVideoToDuration(subwaySurfersVideoPath, mergedVideoLenght);
 
+        // Last merge
+        const newVideos = [
+            {
+                video_path: './temp/subwaySurfersCoinlessRun.mp4',
+                final_duration: mergedVideoLenght,
+                start_time: '00:00:00,000',
+                text: 'Subway surfers coinless run'
+            },
+            {
+                video_path: mergedVideoPath,
+                final_duration: mergedVideoLenght,
+                start_time: '00:00:00,000',
+                text: 'Merged video'
+            }
+        ]
+
+        console.log('<--- MERGING VIDEOS TO VERTICAL SCREEN --->');
+        const verticalMergedPath = './output/vertical_merged_video.mp4';
+        const verticalMergedVideoPath = await mergeSegmentsToVerticalScreen(newVideos, verticalMergedPath, audioPath);
+
+        console.log('<--- VERTICAL MERGED VIDEO PATH --->', verticalMergedVideoPath);
 
         // Part 6: Burn subtitles
-        const finalPath = await addBurnedInASSSubtitles(mergedPath, subtitlesPath);
+        console.log('<--- BURNING SUBTITLES --->');
+        const finalVerticalMergedPath = await addBurnedInASSSubtitles(verticalMergedVideoPath, subtitlesPath);
         console.log('<--- SUBTITLES BURNED --->');
 
         // Part 7: Cleanup temp video files
         // videos.forEach(v => { try { fs.unlinkSync(v.video_path); } catch { } });
-        console.log(`\n✅ Video ready at: ${finalPath}`);
+        console.log(`\n✅ Video ready at: ${finalVerticalMergedPath}`);
 
     } catch (error) {
         console.error(error);

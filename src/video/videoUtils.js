@@ -104,8 +104,11 @@ export const getVideos = async (mainIdeasOriginal) => {
                 text: mainIdea.text
             });
         }
-        const promises = videos.map(video => downloadFinalVideo(video.video_id));
-        await Promise.all(promises);
+        const shouldDownloadVideos = false;
+        if (shouldDownloadVideos) {
+            const promises = videos.map(video => downloadFinalVideo(video.video_id));
+            await Promise.all(promises);
+        }
         console.log('All videos downloaded in 1080p quality');
         console.log('Sum of all durations: ', videos.reduce((acc, video) => acc + video.final_duration, 0));
         return videos;
@@ -220,11 +223,11 @@ const checkResultItemForMainIdea = async (mainIdea, item) => {
         fs.writeFileSync(cachePath, JSON.stringify(item, null, 2));
 
         // Check if there is frames and fram info of video id
-        // const infoOfFrames = await framesAndFrameInfoExists(videoId);
-        // if (infoOfFrames) {
-        //     console.log('Frames and frame info already exist, ...');
-        //     return { videoId };
-        // }
+        const infoOfFrames = await framesAndFrameInfoExists(videoId);
+        if (infoOfFrames) {
+            console.log('Frames and frame info already exist, ...');
+            return { videoId };
+        }
         await donwloadAndExtractFramesOfAVideo(videoId);
         console.log("Frames extracted")
         console.log(`Processing main idea: ${mainIdea} for video: ${videoId} with scores...`);
@@ -303,7 +306,8 @@ const getRandomFramesOfAVideo = async (videoPath, videoId) => {
     console.log(`Extracting frames from video ${videoId} to ${framesFolder}`);
     await new Promise((resolve, reject) => {
         ffmpeg(videoPath)
-            .videoFilters("fps=fps=1/2")
+            .videoFilters("select='gt(scene,0.3)'")
+            .outputOptions("-vsync vfr")
             .output(`${framesFolder}/frame_%04d.jpg`)
             .on("end", resolve)
             .on("error", reject)
@@ -364,4 +368,14 @@ const downloadFinalVideo = async (videoId) => {
             format: "bv*[ext=mp4][height<=1080]",
         }
     });
+}
+
+export const getVideoDuration = async (videoPath) => {
+    const duration = await new Promise((resolve, reject) => {
+        ffmpeg.ffprobe(videoPath, (err, metadata) => {
+            if (err) reject(err);
+            resolve(metadata.format.duration);
+        });
+    });
+    return duration;
 }

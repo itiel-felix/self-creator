@@ -7,8 +7,8 @@ import path from 'path';
 ffmpeg.setFfmpegPath(ffmpegPath);
 ffmpeg.setFfprobePath(ffprobePath.path);
 
-const OUTPUT_WIDTH = 1080;
-const OUTPUT_HEIGHT = 1920;
+const OUTPUT_WIDTH = 1920;
+const OUTPUT_HEIGHT = 1080;
 
 /**
  * Devuelve la cadena de filtros de vídeo según el layout.
@@ -17,25 +17,11 @@ const OUTPUT_HEIGHT = 1920;
  */
 function getVideoFiltersForLayout(layout) {
     switch (layout) {
-        case 'top_half':
-            // Vídeo escalado para caber en la mitad superior, centrado; resto negro
-            return [
-                `scale=${OUTPUT_WIDTH}:${OUTPUT_HEIGHT / 2}:force_original_aspect_ratio=decrease`,
-                `pad=${OUTPUT_WIDTH}:${OUTPUT_HEIGHT / 2}:(ow-iw)/2:0:black`,
-                `pad=${OUTPUT_WIDTH}:${OUTPUT_HEIGHT}:0:0:black`
-            ];
-        case 'bottom_half':
-            // Vídeo en la mitad inferior: pad arriba para bajar el contenido
-            return [
-                `scale=${OUTPUT_WIDTH}:${OUTPUT_HEIGHT / 2}:force_original_aspect_ratio=decrease`,
-                `pad=${OUTPUT_WIDTH}:${OUTPUT_HEIGHT / 2}:(ow-iw)/2:0:black`,
-                `pad=${OUTPUT_WIDTH}:${OUTPUT_HEIGHT}:0:${OUTPUT_HEIGHT / 2}:black`
-            ];
         case 'full':
         default:
             return [
                 `scale=${OUTPUT_WIDTH}:${OUTPUT_HEIGHT}:force_original_aspect_ratio=increase`,
-                'crop=1080:1920'
+                `crop=${OUTPUT_WIDTH}:${OUTPUT_HEIGHT}`
             ];
     }
 }
@@ -47,9 +33,8 @@ function getVideoFiltersForLayout(layout) {
  * @param {string} audioPath - Original audio to overlay
  * @param {{ layout?: 'full'|'top_half'|'bottom_half' }} [options] - layout: 'full' (toda la pantalla), 'top_half' (mitad superior), 'bottom_half' (mitad inferior). Por env: VIDEO_LAYOUT
  */
-export const cutAndMergeSegments = async (videos, outputFile, audioPath, options = {}) => {
-    const layout = options.layout || process.env.VIDEO_LAYOUT || 'full';
-    const videoFilters = getVideoFiltersForLayout(layout);
+export const cutAndConcatSegments = async (videos, outputFile) => {
+    const videoFilters = getVideoFiltersForLayout('full');
 
     const tempFiles = [];
     const tempFolder = './temp';
@@ -109,26 +94,6 @@ export const cutAndMergeSegments = async (videos, outputFile, audioPath, options
         });
         fs.unlinkSync(concatListPath);
 
-        // STEP 4: Overlay original audio
-        if (audioPath) {
-            const videoWithAudio = outputFile.replace('.mp4', '_with_audio.mp4');
-            await new Promise((resolve, reject) => {
-                ffmpeg()
-                    .input(outputFile)
-                    .input(audioPath)
-                    .outputOptions(['-c:v', 'copy', '-c:a', 'aac', '-map', '0:v:0', '-map', '1:a:0', '-shortest'])
-                    .output(videoWithAudio)
-                    .on('end', () => {
-                        fs.unlinkSync(outputFile);
-                        fs.renameSync(videoWithAudio, outputFile);
-                        console.log('✅ Audio overlaid');
-                        resolve();
-                    })
-                    .on('error', (err) => { console.error('Error overlaying audio:', err); reject(err); })
-                    .run();
-            });
-        }
-
         // STEP 5: Clean temp segments
         tempFiles.forEach(file => fs.unlink(file, () => { }));
 
@@ -138,6 +103,110 @@ export const cutAndMergeSegments = async (videos, outputFile, audioPath, options
     }
 }
 
+export const mergeSegmentsToVerticalScreen = async (videos, outputFile, audioPath) => {
+
+    // Merge videos
+    console.log('<--- MERGING VIDEOS TO VERTICAL SCREEN --->');
+    await new Promise((resolve, reject) => {
+        ffmpeg()
+            .input(videos[1].video_path)
+            .input(videos[0].video_path)
+            .complexFilter([
+                "[0:v]fps=30,scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960[v0]",
+                "[1:v]fps=30,scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960[v1]",
+                "[v0][v1]vstack=inputs=2[v]"
+            ])
+            .outputOptions([
+                "-map", "[v]",
+                "-s", "1080x1920",
+                "-c:v", "libx264",
+                "-crf", "23",
+                "-preset", "veryfast"
+            ])
+            .save(outputFile)
+            .on("start", cmd => console.log("FFmpeg command:", cmd))
+            .on("progress", p => console.log(`⏳ frame:${p.frames} time:${p.timemark}`))
+            .on("end", () => {
+                console.log("✅ Video vertical generado");
+                resolve();
+            })
+            .on("error", reject);
+    });
+    // 
+    console.log('<--- MERGED VIDEOS TO VERTICAL SCREEN --->');
+    console.log('<--- ADDING AUDIO TO VIDEO --->');
+    const videoWithAudio = await addAudioToVideo(outputFile, audioPath);
+    console.log('<--- AUDIO ADDED TO VIDEO --->');
+    return videoWithAudio;
+};
+
+const addAudioToVideo = async (videoPath, audioPath) => {
+    // Add audio
+    const outputFile = videoPath.replace(".mp4", "_with_audio.mp4");
+    console.log('<--- ADDING AUDIO TO VIDEO --->');
+    console.log(`Adding audio to video ${videoPath} with audio ${audioPath}`);
+    const videoWithAudio = await new Promise((resolve, reject) => {
+        ffmpeg()
+            .input(videoPath)
+            .input(audioPath)
+            .outputOptions([
+                "-map 0:v",
+                "-map 1:a",
+                "-c:v copy",
+                "-c:a aac",
+                "-shortest"
+            ])
+            .save(outputFile)
+            .on("end", () => {
+                console.log("✅ Audio añadido");
+                resolve();
+            })
+            .on("error", (err) => { console.error('Error adding audio:', err); reject(err); });
+    });
+    console.log('<--- AUDIO ADDED TO VIDEO --->');
+    // delete original video
+    fs.unlinkSync(videoPath);
+    // rename output file to original video
+    fs.renameSync(outputFile, videoPath);
+    return videoPath;
+}
+
+export const cropVideoToDuration = async (videoPath, duration) => {
+    console.log('<--- CROPPING VIDEO TO DURATION --->');
+    console.log(`Cropping video ${videoPath} to duration: ${duration} seconds`);
+    const tempVideo = videoPath.replace(".mp4", "_temp.mp4");
+    await new Promise((resolve, reject) => {
+        ffmpeg(videoPath)
+            .setStartTime(0)
+            .setDuration(duration)
+            .save(tempVideo)
+            .outputOptions([
+                "-c:v", "libx264",
+                "-crf", "23",
+                "-preset", "ultrafast",
+                "-an"
+            ])
+            .on("progress", progress => {
+                console.log(`⏳ frame: ${progress.frames} | time: ${progress.timemark}`);
+            })
+            .on("end", () => {
+                console.log("✅ Video cropped");
+                resolve();
+            }).on("start", cmd => {
+                console.log("FFmpeg command:", cmd);
+            })
+            .on("stderr", line => {
+                console.log("FFmpeg:", line);
+            })
+            .on("error", reject);
+    });
+    console.log('<--- CROPPED VIDEO TO DURATION --->');
+    // delete original video
+    fs.unlinkSync(videoPath);
+    // rename temp video to original video
+    fs.renameSync(tempVideo, videoPath);
+    return videoPath;
+}
 /**
  * Burns ASS subtitles directly into the video frames.
  * @param {string} videoPath - Input video path

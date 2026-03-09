@@ -6,9 +6,15 @@ import fs from 'fs';
  * @param {string} searchWord - The word to search for.
  * @returns {Promise<{id: string, title: string, description: string, thumbnail: string, duration: number, viewCount: number, likeCount: number, commentCount: number, channelId: string, channelTitle: string, channelUrl: string, channelThumbnail: string, channelSubscriberCount: number, channelVideoCount: number, channelViewCount: number}[]>} The videos found.
  */
-export const searchVideosInYoutube = async (searchWord) => {
+export const searchVideosInYoutube = async (searchWord, minDuration = null) => {
     if (await hasBannedTerm(searchWord)) {
         return [];
+    }
+    let matchFilter = '';
+    if (minDuration) {
+        matchFilter = `duration > ${minDuration} & !is_live`;
+    } else {
+        matchFilter = 'duration < 300 & !is_live';
     }
     try {
         const results = await youtubedl(
@@ -16,7 +22,7 @@ export const searchVideosInYoutube = async (searchWord) => {
             {
                 dumpSingleJson: true,
                 noDownload: true,
-                matchFilter: "duration < 300 & !is_live",
+                matchFilter: matchFilter,
                 flatPlaylist: true,
                 ignoreErrors: true,
                 extractorArgs: "youtube:player_client=android,web",
