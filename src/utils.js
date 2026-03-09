@@ -45,5 +45,6 @@ export {
     createVideoUrl,
     timeToSeconds,
     calculateGoldenSecond,
-    getStartAndEndTimeFromVideoId
+    getStartAndEndTimeFromVideoId,
+    initializeCache
 };

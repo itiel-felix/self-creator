@@ -5,7 +5,7 @@ import fs from "fs";
 const subwaySurfers = async (minDuration = 300) => {
     const youtubeVideo = await searchVideosInYoutube("subway surfers coinless run", minDuration);
     // Download the video
-    const videoPath = await downloadYoutubeVideo({ videoId: youtubeVideo[0].id, outputFolder: './temp', customName: 'subwaySurfersCoinlessRun' });
+    const videoPath = await downloadYoutubeVideo({ videoId: youtubeVideo[0].id, outputFolder: './temp', customName: 'subwaySurfersCoinlessRun', minDuration: minDuration });
     // Extract frames from the video
     return videoPath;
 }

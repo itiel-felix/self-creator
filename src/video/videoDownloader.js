@@ -22,7 +22,8 @@ export const downloadYoutubeVideo = async ({
     outputFolder,
     shouldReturnJSON = false,
     extraOptions = {},
-    customName = null
+    customName = null,
+    minDuration = null
 }) => {
 
     const videoUrl = getYoutubeVideoUrl(videoId);
@@ -37,6 +38,11 @@ export const downloadYoutubeVideo = async ({
 
         noWarnings: true,
         cookiesFromBrowser: "firefox"
+    }
+    // cortar video
+    if (minDuration) {
+        const end = new Date(minDuration * 1000).toISOString().substring(11, 19);
+        extraOptions.downloadSections = `*00:00:00-${end}`;
     }
 
     if (shouldReturnJSON) {

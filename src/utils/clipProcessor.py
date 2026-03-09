@@ -5,54 +5,63 @@ import sys
 import os
 import json
 
-print("Starting clip processor...")
+# "Starting clip processor..."
+
 main_idea = sys.argv[1]
 video_id = sys.argv[2]
 images_folder = f"./frames/{video_id}"
 
-print(f"Processing main idea: {main_idea} for video: {video_id}")
-print(f"Images folder: {images_folder}")
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
-
-
-print("Loading model...")
+# "Loading model..."
 model, _, preprocess = open_clip.create_model_and_transforms(
     "ViT-B-32",
     pretrained="laion2b_s34b_b79k"
 )
-print("Model loaded")
 
+model = model.to(device)
+model.eval()
 
 tokenizer = open_clip.get_tokenizer("ViT-B-32")
-scores = []
 
-print("Tokenizing main idea...")
-text = tokenizer([main_idea])
-print("Main idea tokenized")
+# "Encoding text..."
+text = tokenizer([main_idea]).to(device)
 
-print("Encoding text features...")
 with torch.no_grad():
     text_features = model.encode_text(text)
-print("Text features encoded")
+    text_features /= text_features.norm(dim=-1, keepdim=True)
 
-print("Processing images...")
-for image_file in os.listdir(images_folder):
-    if image_file.endswith(".jpg"):
+image_files = [
+    f for f in os.listdir(images_folder)
+    if f.endswith(".jpg")
+]
 
-        image_path = f"{images_folder}/{image_file}"
-        image = preprocess(Image.open(image_path)).unsqueeze(0)
+batch_size = 32
+scores = []
 
-        with torch.no_grad():
-            image_features = model.encode_image(image)
+# "Processing images in batches..."
 
-        similarity = torch.nn.functional.cosine_similarity(
-            image_features,
-            text_features
-        ).item()
+for i in range(0, len(image_files), batch_size):
 
-        scores.append((image_file, similarity))
-        print(f"Image {image_file} processed with similarity: {similarity}")
-print("Images processed")
+    batch_files = image_files[i:i+batch_size]
+    images = []
 
-print("Saving scores...")
+    for file in batch_files:
+        path = f"{images_folder}/{file}"
+        img = preprocess(Image.open(path))
+        images.append(img)
+
+    images = torch.stack(images).to(device)
+
+    with torch.no_grad():
+        image_features = model.encode_image(images)
+        image_features /= image_features.norm(dim=-1, keepdim=True)
+
+        similarity = image_features @ text_features.T
+
+    for j, file in enumerate(batch_files):
+        score = similarity[j].item()
+        scores.append((file, score))
+        # print(f"{file} -> {score}")
+
 print(json.dumps(scores))

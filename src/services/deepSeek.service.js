@@ -84,9 +84,7 @@ Main idea: Luego, esa orina se recolectaba y se vendía en la vendería llamada 
 Better Output: selling [something, replace with something in the idea] / collecting [something, replace with something in the idea], selling fruits, sell vegetables
 
 Main idea: ¿Sabías que en la antigua Roma la orina era usado como producto de limpieza?
-Better Output: rome forum, rome colosseum, rome architecture, rome city aerial view
-
-
+Better Output: rome aerial view, rome forum, rome colosseum, rome architecture, 
 `;
 
 const auxiliarSystemPrompt = `You will receive a short scene idea describing something that could appear in a video.
@@ -208,9 +206,8 @@ ancient roman street scene
 
 Output:
 [
-"ancient rome",
-"Rome city aerial view",
-"Rome colosseum",
+"Rome aerial view",
+"ancient rome fight",
 "Pisa tower",
 "Pisa tower drone view"
 ]

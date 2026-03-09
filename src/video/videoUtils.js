@@ -232,10 +232,13 @@ const checkResultItemForMainIdea = async (mainIdea, item) => {
         console.log("Frames extracted")
         console.log(`Processing main idea: ${mainIdea} for video: ${videoId} with scores...`);
         const scores = await clipProcessor(mainIdea, videoId);
+        if (!scores) {
+            console.log('No scores found');
+        }
         const sortingScores = scores.sort((a, b) => b[1] - a[1]);
         const bestScore = sortingScores[0];
+        console.log('Best score: ', bestScore);
         if (bestScore[1] >= 0.3) {
-            console.log("Best score: ", bestScore);
             await writeVideoIdWithFrame(videoId, bestScore[0]);
             return { videoId };
         } else {
@@ -247,11 +250,6 @@ const checkResultItemForMainIdea = async (mainIdea, item) => {
         console.log('Error with main idea: ', mainIdea);
         console.log(`Error searching for videos for main idea: ${mainIdea}: ${error}`);
         console.log('Continuing with next main idea...');
-        if (error?.stderr?.includes('WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]')) {
-            return { videoId: null };
-        } else {
-            throw error;
-        }
     }
 }
 
@@ -304,16 +302,26 @@ const getRandomFramesOfAVideo = async (videoPath, videoId) => {
     }
     if (!fs.existsSync(framesFolder)) fs.mkdirSync(framesFolder);
     console.log(`Extracting frames from video ${videoId} to ${framesFolder}`);
+    await getFramesFromVideo(videoPath, framesFolder, "select='gt(scene,0.4)'");
+
+    // If frames folder its empty, try with another filter
+    if (fs.readdirSync(framesFolder).length === 0) {
+        console.log('Frames folder is empty, trying with another filter');
+        await getFramesFromVideo(videoPath, framesFolder, "fps=1/2");
+    }
+};
+
+const getFramesFromVideo = async (videoPath, framesFolder, filter = "select='gt(scene,0.3)'") => {
     await new Promise((resolve, reject) => {
         ffmpeg(videoPath)
-            .videoFilters("select='gt(scene,0.3)'")
+            .videoFilters(filter)
             .outputOptions("-vsync vfr")
             .output(`${framesFolder}/frame_%04d.jpg`)
             .on("end", resolve)
             .on("error", reject)
             .run();
     });
-};
+}
 
 /**
  * Removes a video and its frames from the filesystem.
