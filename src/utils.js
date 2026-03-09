@@ -18,23 +18,16 @@ const calculateGoldenSecond = (number) => {
 }
 
 const getStartAndEndTimeFromVideoId = (videoId, duration) => {
-    console.log('Getting start and end time from video id: ', videoId, duration);
     const jsonPath = `./cache/frame_info.json`;
     const frameInfo = JSON.parse(fs.readFileSync(jsonPath, 'utf8'))[videoId];
-    console.log('Frame info: ', frameInfo);
     const splittedBySlash = frameInfo?.split('/');
     const frameName = splittedBySlash[splittedBySlash.length - 1].split('.')[0];
     const frameSecond = Number(frameName?.split('_')[1]);
 
-    console.log('Frame second: ', frameSecond);
-    console.log('Frame name: ', frameName);
     const goldenSecond = calculateGoldenSecond(frameSecond);
 
-    console.log('Golden second: ', goldenSecond);
-    const startTime = goldenSecond - (duration / 2);
-    console.log('Start time: ', startTime);
+    const startTime = goldenSecond - (duration / 2.0);
     const endTime = startTime + duration;
-    console.log('End time: ', endTime);
     return {
         start_time: startTime,
         end_time: endTime

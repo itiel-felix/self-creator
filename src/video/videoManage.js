@@ -7,13 +7,50 @@ import path from 'path';
 ffmpeg.setFfmpegPath(ffmpegPath);
 ffmpeg.setFfprobePath(ffprobePath.path);
 
+const OUTPUT_WIDTH = 1080;
+const OUTPUT_HEIGHT = 1920;
+
+/**
+ * Devuelve la cadena de filtros de vídeo según el layout.
+ * @param {'full'|'top_half'|'bottom_half'} layout
+ * @returns {string[]} filtros para videoFilters()
+ */
+function getVideoFiltersForLayout(layout) {
+    switch (layout) {
+        case 'top_half':
+            // Vídeo escalado para caber en la mitad superior, centrado; resto negro
+            return [
+                `scale=${OUTPUT_WIDTH}:${OUTPUT_HEIGHT / 2}:force_original_aspect_ratio=decrease`,
+                `pad=${OUTPUT_WIDTH}:${OUTPUT_HEIGHT / 2}:(ow-iw)/2:0:black`,
+                `pad=${OUTPUT_WIDTH}:${OUTPUT_HEIGHT}:0:0:black`
+            ];
+        case 'bottom_half':
+            // Vídeo en la mitad inferior: pad arriba para bajar el contenido
+            return [
+                `scale=${OUTPUT_WIDTH}:${OUTPUT_HEIGHT / 2}:force_original_aspect_ratio=decrease`,
+                `pad=${OUTPUT_WIDTH}:${OUTPUT_HEIGHT / 2}:(ow-iw)/2:0:black`,
+                `pad=${OUTPUT_WIDTH}:${OUTPUT_HEIGHT}:0:${OUTPUT_HEIGHT / 2}:black`
+            ];
+        case 'full':
+        default:
+            return [
+                `scale=${OUTPUT_WIDTH}:${OUTPUT_HEIGHT}:force_original_aspect_ratio=increase`,
+                'crop=1080:1920'
+            ];
+    }
+}
+
 /**
  * Cuts each video to the needed duration, merges them, and overlays the original audio.
  * @param {Object[]} videos - Array of { video_path, final_duration, start_time, end_time, text }
  * @param {string} outputFile - Output file path
  * @param {string} audioPath - Original audio to overlay
+ * @param {{ layout?: 'full'|'top_half'|'bottom_half' }} [options] - layout: 'full' (toda la pantalla), 'top_half' (mitad superior), 'bottom_half' (mitad inferior). Por env: VIDEO_LAYOUT
  */
-export const cutAndMergeSegments = async (videos, outputFile, audioPath) => {
+export const cutAndMergeSegments = async (videos, outputFile, audioPath, options = {}) => {
+    const layout = options.layout || process.env.VIDEO_LAYOUT || 'full';
+    const videoFilters = getVideoFiltersForLayout(layout);
+
     const tempFiles = [];
     const tempFolder = './temp';
 
@@ -28,10 +65,7 @@ export const cutAndMergeSegments = async (videos, outputFile, audioPath) => {
                 ffmpeg(video.video_path)
                     .setStartTime(video.start_time)
                     .setDuration(video.final_duration)
-                    .videoFilters([
-                        'scale=1080:1920:force_original_aspect_ratio=increase',
-                        'crop=1080:1920'
-                    ])
+                    .videoFilters(videoFilters)
                     .outputOptions(['-r', '30'])
                     .output(tempFile)
                     .on('end', () => {

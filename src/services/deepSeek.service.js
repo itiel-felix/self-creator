@@ -33,16 +33,15 @@ Rules:
 2. Create visual scene segments that cover the entire duration of the subtitles.
 3. Each segment MUST describe a simple visual scene.
 4. Each segment MUST:
-   - be at least 1 second
-   - be at most 2.5 seconds
-5. If a segment is longer than 2.5 seconds, split it into multiple segments.
+   - be at least 0.5 second
+   - be at most 2 seconds
+5. If a segment is longer than 2 seconds, split it into multiple segments.
 6. The total duration of all segments MUST exactly match the duration of the subtitles.
-7. If a scene is consecutive to the previous one, merge them into a single scene and calculate a new end time.
-8. Scene descriptions MUST be in English.
-9. Keep scene descriptions short (1-3 words).
-10. Avoid offensive or graphic words. Replace them with safer alternatives that still represent the topic.
-11. Prefer scenes that are easy to find in stock footage or YouTube clips.
-12. Use generic sustantives to the scene description. 
+7. Scene descriptions MUST be in English.
+8. Keep scene descriptions short (1-3 words).
+9. Avoid offensive or graphic words. Replace them with safer alternatives that still represent the topic.
+10. Prefer scenes that are easy to find in stock footage or YouTube clips.
+11. Use generic sustantives to the scene description. 
     Example: "selling something" -> "selling [something, replace with something in the idea]" -> "selling flowers", "money" ,"market" or just "selling"
     Example: "collecting something" -> "collecting [something, replace with something in the idea]" -> "collecting coins", "collecting trash", "junk" or just "collecting"
     Example: "pouring something" -> "pouring [something, replace with something in the idea]" -> "pouring water", "pouring oil", "pouring wine (if the idea is about wine)" or just "pouring"
@@ -59,11 +58,12 @@ Return ONLY a JSON array with the following structure:
 Important constraints:
 
 - The duration of all segments combined must equal the total subtitle duration.
-- Each segment must respect the 1–2.5 second rule.
+- Each segment must respect the 0.5 to 2 second rule.
 - Scene descriptions must represent something that could realistically appear in a video clip.
 - Avoid adding specific sustantives to the scene description. Prefer generic descriptions.
 - Do not return any explanations or extra text. Only the JSON array.
 - In actions like pouring, walking, typing, etc., prefer generic descriptions over specific ones. Do not add subjects to the description.
+- Avoid duplicate queries.
 
 Bad examples:   
 
@@ -149,7 +149,7 @@ walking
 
 For LIQUIDS / MATERIALS use:
 pouring  
-liquid close up  
+close up  
 slow motion  
 macro shot  
 
@@ -184,7 +184,6 @@ Guidelines:
     Example: "selling something" -> "selling [something, replace with something in the idea]" -> "selling flowers", "money" ,"market"
     Example: "collecting something" -> "collecting [something, replace with something in the idea]" -> "collecting coins", "collecting trash", "junk"
     Example: "pouring something" -> "pouring [something, replace with something in the idea]" -> "pouring water", "pouring oil", "pouring wine (if the idea is about wine)"
-
 STEP 5 — Footage modifiers
 
 Optionally include terms often used in footage searches:

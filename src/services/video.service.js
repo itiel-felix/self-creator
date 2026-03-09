@@ -1,7 +1,11 @@
 import youtubedl from "youtube-dl-exec";
 import fs from 'fs';
 
-
+/**
+ * Search for videos in YouTube.
+ * @param {string} searchWord - The word to search for.
+ * @returns {Promise<{id: string, title: string, description: string, thumbnail: string, duration: number, viewCount: number, likeCount: number, commentCount: number, channelId: string, channelTitle: string, channelUrl: string, channelThumbnail: string, channelSubscriberCount: number, channelVideoCount: number, channelViewCount: number}[]>} The videos found.
+ */
 export const searchVideosInYoutube = async (searchWord) => {
     if (await hasBannedTerm(searchWord)) {
         return [];

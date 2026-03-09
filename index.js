@@ -60,6 +60,10 @@ import { generateASS, generateSRT } from "./src/subtitles/subtitle.service.js";
         await cutAndMergeSegments(videos, mergedPath, audioPath);
         console.log('<--- VIDEO MERGED --->');
 
+        // Part 6: Download subway surfers video
+        await subwaySurfers();
+
+
         // Part 6: Burn subtitles
         const finalPath = await addBurnedInASSSubtitles(mergedPath, subtitlesPath);
         console.log('<--- SUBTITLES BURNED --->');
