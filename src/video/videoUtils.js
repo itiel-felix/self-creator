@@ -25,7 +25,6 @@ export const getVideos = async (mainIdeasOriginal) => {
 
     const videoByKeyword = {};
     const usedVideosIds = [];
-    console.log('Starting search for main ideas: ', mainIdeas.length);
 
     let results = [];
     let shouldUseResults = true;
@@ -35,24 +34,16 @@ export const getVideos = async (mainIdeasOriginal) => {
     } else {
         for (let index = 0; index < mainIdeas.length; index++) {
             const mainIdea = mainIdeas[index];
-            console.log('ANALYZING MAIN IDEA: ', mainIdea.text, ', (', index + 1, 'of', mainIdeas.length, ')');
             const result = await chooseVideoFromYoutube(mainIdea.text, usedVideosIds);
-            console.log('Result of chooseVideoFromYoutube: ', result);
             results.push(result);
         }
         fs.writeFileSync('./cache/results.json', JSON.stringify(results, null, 2));
     }
 
-    console.log('--- Finished choosing videos from Youtube --->');
-
     const newMainIdeas = [];
-    console.log('Starting to get start and end time from videos...');
     for (let i = 0; i < mainIdeas.length; i++) {
-        console.log('---------------------------------');
         const mainIdea = mainIdeas[i];
         const result = results[i];
-        console.log('Result: ', result);
-        console.log("Analuzed main idea: ", mainIdea);
         const newStartTime = i === 0 ? '00:00:00,000' : mainIdea.start_time;
         const key = `${mainIdea.text}-${newStartTime}-${mainIdea.end_time}`;
         const videoDuration = timeToSeconds(mainIdea.end_time) - timeToSeconds(newStartTime);
@@ -72,17 +63,9 @@ export const getVideos = async (mainIdeasOriginal) => {
         const videoId = typeof raw === "string" ? raw : raw?.videoId ?? null;
         if (videoId) {
             videoByKeyword[key] = videoId;
-            console.log(`Found vertical video for: ${mainIdea.text} -> ${getYoutubeVideoUrl(videoId)}`);
-        } else {
-            console.log(`No vertical video found for: ${mainIdea.text}`);
         }
     }
-    console.log('----- Search for main ideas done ---------------------------------');
-    console.log("New main ideas: ", newMainIdeas);
-    console.log('Total new main ideas: ', newMainIdeas.length);
-    console.log('---------------------------------');
 
-    console.log('---- Starting to get all videos info ---------------------------------');
     try {
         for (let i = 0; i < newMainIdeas.length; i++) {
             const mainIdea = newMainIdeas[i];
@@ -95,7 +78,6 @@ export const getVideos = async (mainIdeasOriginal) => {
                 ? timeToSeconds(nextMainIdea.start_time)
                 : timeToSeconds(mainIdea.end_time);
             const segmentDuration = endSec - startSec;
-            console.log('Needed duration: ', segmentDuration, nextMainIdea ? '(hasta sig. idea)' : '(última)');
             videos.push({
                 video_id: mainIdea.video_id,
                 video_path: videoPath,
@@ -109,8 +91,6 @@ export const getVideos = async (mainIdeasOriginal) => {
             const promises = videos.map(video => downloadFinalVideo(video.video_id));
             await Promise.all(promises);
         }
-        console.log('All videos downloaded in 1080p quality');
-        console.log('Sum of all durations: ', videos.reduce((acc, video) => acc + video.final_duration, 0));
         return videos;
     } catch (error) {
         // fs.readdirSync(tempFolder).forEach(file => fs.unlinkSync(`${tempFolder}/${file}`));
@@ -185,10 +165,8 @@ export const chooseVideoFromYoutube = async (mainIdea, usedVideosIds = []) => {
  */
 const checkVideosForMainIdea = async (processedMainIdea, usedVideosIds = [], tooHard = false) => {
     const fullTerm = `${processedMainIdea}`;
-    console.log(`Searching for videos with term: ${fullTerm}`);
     const results = await searchVideosInYoutube(fullTerm);
     if (results.length === 0) {
-        console.log(`No videos found for term: ${fullTerm}, adding to burned terms...`);
         tooHard = true;
         return { videoId: null, tooHard: true };
     }
@@ -215,7 +193,6 @@ const checkResultItemForMainIdea = async (mainIdea, item) => {
         const cacheDir = 'cache/videoInfo';
         const cachePath = `${cacheDir}/${videoId}.json`;
         if (fs.existsSync(cachePath)) {
-            console.log('Video info already in cache, choosing another video...');
             return {};
         }
 
@@ -225,19 +202,12 @@ const checkResultItemForMainIdea = async (mainIdea, item) => {
         // Check if there is frames and fram info of video id
         const infoOfFrames = await framesAndFrameInfoExists(videoId);
         if (infoOfFrames) {
-            console.log('Frames and frame info already exist, ...');
             return { videoId };
         }
         await donwloadAndExtractFramesOfAVideo(videoId);
-        console.log("Frames extracted")
-        console.log(`Processing main idea: ${mainIdea} for video: ${videoId} with scores...`);
         const scores = await clipProcessor(mainIdea, videoId);
-        if (!scores) {
-            console.log('No scores found');
-        }
         const sortingScores = scores.sort((a, b) => b[1] - a[1]);
         const bestScore = sortingScores[0];
-        console.log('Best score: ', bestScore);
         if (bestScore[1] >= 0.3) {
             await writeVideoIdWithFrame(videoId, bestScore[0]);
             return { videoId };
@@ -247,9 +217,6 @@ const checkResultItemForMainIdea = async (mainIdea, item) => {
         }
     }
     catch (error) {
-        console.log('Error with main idea: ', mainIdea);
-        console.log(`Error searching for videos for main idea: ${mainIdea}: ${error}`);
-        console.log('Continuing with next main idea...');
     }
 }
 
@@ -301,12 +268,9 @@ const getRandomFramesOfAVideo = async (videoPath, videoId) => {
         fs.mkdirSync('./frames');
     }
     if (!fs.existsSync(framesFolder)) fs.mkdirSync(framesFolder);
-    console.log(`Extracting frames from video ${videoId} to ${framesFolder}`);
     await getFramesFromVideo(videoPath, framesFolder, "select='gt(scene,0.4)'");
 
-    // If frames folder its empty, try with another filter
     if (fs.readdirSync(framesFolder).length === 0) {
-        console.log('Frames folder is empty, trying with another filter');
         await getFramesFromVideo(videoPath, framesFolder, "fps=1/2");
     }
 };
@@ -342,18 +306,13 @@ const removeVideoAndFrames = async (videoId) => {
  */
 const framesAndFrameInfoExists = async (videoId) => {
     const frameInfoPath = `./cache/frame_info.json`;
-    console.log('Checking if frames and frame info exist for video id: ', videoId);
     if (!fs.existsSync(frameInfoPath)) {
-        console.log('Frame info path does not exist, skipping...');
         return false;
     }
     const frameInfo = JSON.parse(fs.readFileSync(frameInfoPath, 'utf8'));
-    console.log('Frame info: ', frameInfo);
     if (!frameInfo[videoId]) {
-        console.log('Frame info does not exist for video id: ', videoId, 'skipping...');
         return false;
     }
-    console.log('Frames and frame info exist for video id: ', videoId);
     return true;
 }
 

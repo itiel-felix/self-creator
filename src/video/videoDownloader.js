@@ -29,7 +29,6 @@ export const downloadYoutubeVideo = async ({
     const videoUrl = getYoutubeVideoUrl(videoId);
     const filePath = `${outputFolder}/${customName || videoId}.mp4`;
     if (fs.existsSync(filePath)) {
-        console.log(`Video ${videoId} already downloaded, skipping...`);
         return filePath;
     }
     const baseOpt = {
@@ -46,12 +45,10 @@ export const downloadYoutubeVideo = async ({
     }
 
     if (shouldReturnJSON) {
-        console.log('Returning JSON for video: ', videoId);
         const youtubeDlOptions = { dumpSingleJson: true, ...baseOpt, ...extraOptions };
         const json = await youtubedl(videoUrl, youtubeDlOptions);
         return json;
     }
-    console.log('Downloading video from YouTube: ', videoUrl);
     await youtubedl(videoUrl, {
         output: filePath,
         format: "bv*[ext=mp4][height<=1080]",

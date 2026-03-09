@@ -32,7 +32,6 @@ import { initializeCache } from "./src/utils.js";
         } else {
             segments = JSON.parse(fs.readFileSync('./cache/audio.json', 'utf8'));
         }
-        console.log('<--- TRANSCRIPTION DONE --->');
 
         // Part 2: Generate subtitles
         const subtitlesPath = './output/subtitles.ass';
@@ -40,11 +39,9 @@ import { initializeCache } from "./src/utils.js";
             const allWords = segments.flatMap(s => s.words ?? []);
             fs.writeFileSync(subtitlesPath, generateASS(allWords));
         }
-        console.log('<--- SUBTITLES DONE --->');
 
         // Part 3: Get keywords for video search
         const srt = generateSRT(segments);
-        console.log('<--- GETTING MAIN IDEAS --->');
         let mainIdeas;
         if (fs.existsSync('./cache/mainIdeas.json')) {
             mainIdeas = JSON.parse(fs.readFileSync('./cache/mainIdeas.json', 'utf8'));
@@ -52,18 +49,14 @@ import { initializeCache } from "./src/utils.js";
             mainIdeas = await getMainIdea(srt);
             fs.writeFileSync('./cache/mainIdeas.json', JSON.stringify(mainIdeas, null, 2));
         }
-        console.log('<--- MAIN IDEAS DONE --->');
 
         // Part 4: Download and prepare video segments
         const videos = await getVideos(mainIdeas);
-        console.log('<--- VIDEOS DOWNLOADED --->');
 
         // Part 5: Merge videos with audio
         const mergedPath = './output/merged_video.mp4';
         const mergedVideoPath = await cutAndConcatSegments(videos, mergedPath);
         const mergedVideoLenght = await getVideoDuration(mergedVideoPath);
-
-        console.log('<--- VIDEO MERGED --->');
 
         // Part 6: Download subway surfers video
         const subwaySurfersVideoPath = await subwaySurfers(mergedVideoLenght);
@@ -85,25 +78,17 @@ import { initializeCache } from "./src/utils.js";
             }
         ]
 
-        console.log('<--- MERGING VIDEOS TO VERTICAL SCREEN --->');
         const verticalMergedPath = './output/vertical_merged_video.mp4';
         const verticalMergedVideoPath = await mergeSegmentsToVerticalScreen(newVideos, verticalMergedPath, audioPath);
 
-        console.log('<--- VERTICAL MERGED VIDEO PATH --->', verticalMergedVideoPath);
-
         // Part 6: Burn subtitles
-        console.log('<--- BURNING SUBTITLES --->');
         const finalVerticalMergedPath = await addBurnedInASSSubtitles(verticalMergedVideoPath, subtitlesPath);
-        console.log('<--- SUBTITLES BURNED --->');
 
         // Part 7: Cleanup temp video files
         // videos.forEach(v => { try { fs.unlinkSync(v.video_path); } catch { } });
-        console.log(`\n✅ Video ready at: ${finalVerticalMergedPath}`);
 
     } catch (error) {
         console.error(error);
-    } finally {
-        console.log(`Time taken: ${((Date.now() - start) / 1000).toFixed(1)}s`);
     }
 
 })();

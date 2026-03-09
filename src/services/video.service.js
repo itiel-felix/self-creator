@@ -34,8 +34,6 @@ export const searchVideosInYoutube = async (searchWord, minDuration = null) => {
         if (entries.length === 0) await addBannedTerm(searchWord);
         return entries;
     } catch (error) {
-        console.log('Error with keyword: ', searchWord);
-        console.log(`XXXXXXXXXXXXXXXXXXXXX Error searching for videos: ${error}`);
         throw new Error(`Failed to search for videos: ${error}`);
     }
 }

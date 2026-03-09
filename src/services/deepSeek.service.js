@@ -221,7 +221,6 @@ export const getMainIdea = async (transcriptionOfAudioInSrtFormat) => {
         apiKey: process.env.DEEPSEEK_API_KEY,
     });
     try {
-        console.log('<------------- GETTING MAIN IDEA ------------------->');
         const response = await openai.chat.completions.create({
             model: "deepseek-chat",
             messages: [
@@ -230,13 +229,10 @@ export const getMainIdea = async (transcriptionOfAudioInSrtFormat) => {
             ],
             response_format: { type: "json_object" }
         });
-        console.log('<------------- MAIN IDEA DONE ------------------->');
         const raw = response.choices[0].message.content.replace(/^```json\s*/i, "").replace(/```$/, "").trim();
         const parsedResponse = JSON.parse(raw);
         return parsedResponse;
     } catch (error) {
-        console.log('<------------- ERROR ------------------->');
-        console.log(error);
         throw new Error(`Failed to get main idea: ${error.message}`);
     }
 }
@@ -259,13 +255,8 @@ export const getProcessedMainIdea = async (mainIdea, tooHard = false, burnedTerm
         });
         const raw = response.choices[0].message.content.replace(/^```json\s*/i, "").replace(/```$/, "").trim();
         const parsedResponse = JSON.parse(raw);
-        console.log('<------------- PROCESSED MAIN IDEA DONE ------------------->');
-        console.log(parsedResponse);
-        console.log('For Main Idea: ', mainIdea);
         return parsedResponse;
     } catch (error) {
-        console.log('<------------- ERROR ------------------->');
-        console.log(error);
         throw new Error(`Failed to get processed main idea: ${mainIdea}: ${error.message}`);
     }
 }

@@ -53,10 +53,7 @@ export const cutAndConcatSegments = async (videos, outputFile) => {
                     .videoFilters(videoFilters)
                     .outputOptions(['-r', '30'])
                     .output(tempFile)
-                    .on('end', () => {
-                        console.log(`Segment ${i + 1}/${videos.length} cut: ${video.final_duration}s`);
-                        resolve();
-                    })
+                    .on('end', () => resolve())
                     .on('error', (err) => {
                         console.error(`Error cutting segment ${i + 1}:`, err);
                         reject(err);
@@ -75,10 +72,8 @@ export const cutAndConcatSegments = async (videos, outputFile) => {
                 });
             });
         }
-        console.log(`Total video duration: ${totalRealDuration.toFixed(2)}s`);
 
         // STEP 3: Merge segments with concat demuxer
-        console.log('Merging segments...');
         const concatListPath = `${tempFolder}/concat_list.txt`;
         fs.writeFileSync(concatListPath, tempFiles.map(f => `file '${path.resolve(f)}'`).join('\n'));
 
@@ -88,7 +83,7 @@ export const cutAndConcatSegments = async (videos, outputFile) => {
                 .inputOptions(['-f', 'concat', '-safe', '0'])
                 .outputOptions(['-c:v', 'libx264', '-preset', 'fast', '-vsync', 'cfr', '-r', '30', '-an'])
                 .output(outputFile)
-                .on('end', () => { console.log('✅ Video merged:', outputFile); resolve(); })
+                .on('end', () => resolve())
                 .on('error', (err) => { console.error('Error merging:', err); reject(err); })
                 .run();
         });
@@ -104,9 +99,6 @@ export const cutAndConcatSegments = async (videos, outputFile) => {
 }
 
 export const mergeSegmentsToVerticalScreen = async (videos, outputFile, audioPath) => {
-
-    // Merge videos
-    console.log('<--- MERGING VIDEOS TO VERTICAL SCREEN --->');
     await new Promise((resolve, reject) => {
         ffmpeg()
             .input(videos[1].video_path)
@@ -124,27 +116,15 @@ export const mergeSegmentsToVerticalScreen = async (videos, outputFile, audioPat
                 "-preset", "veryfast"
             ])
             .save(outputFile)
-            .on("start", cmd => console.log("FFmpeg command:", cmd))
-            .on("progress", p => console.log(`⏳ frame:${p.frames} time:${p.timemark}`))
-            .on("end", () => {
-                console.log("✅ Video vertical generado");
-                resolve();
-            })
+            .on("end", () => resolve())
             .on("error", reject);
     });
-    // 
-    console.log('<--- MERGED VIDEOS TO VERTICAL SCREEN --->');
-    console.log('<--- ADDING AUDIO TO VIDEO --->');
     const videoWithAudio = await addAudioToVideo(outputFile, audioPath);
-    console.log('<--- AUDIO ADDED TO VIDEO --->');
     return videoWithAudio;
 };
 
 const addAudioToVideo = async (videoPath, audioPath) => {
-    // Add audio
     const outputFile = videoPath.replace(".mp4", "_with_audio.mp4");
-    console.log('<--- ADDING AUDIO TO VIDEO --->');
-    console.log(`Adding audio to video ${videoPath} with audio ${audioPath}`);
     const videoWithAudio = await new Promise((resolve, reject) => {
         ffmpeg()
             .input(videoPath)
@@ -157,13 +137,9 @@ const addAudioToVideo = async (videoPath, audioPath) => {
                 "-shortest"
             ])
             .save(outputFile)
-            .on("end", () => {
-                console.log("✅ Audio añadido");
-                resolve();
-            })
+            .on("end", () => resolve())
             .on("error", (err) => { console.error('Error adding audio:', err); reject(err); });
     });
-    console.log('<--- AUDIO ADDED TO VIDEO --->');
     // delete original video
     fs.unlinkSync(videoPath);
     // rename output file to original video
@@ -172,8 +148,6 @@ const addAudioToVideo = async (videoPath, audioPath) => {
 }
 
 export const cropVideoToDuration = async (videoPath, duration) => {
-    console.log('<--- CROPPING VIDEO TO DURATION --->');
-    console.log(`Cropping video ${videoPath} to duration: ${duration} seconds`);
     const tempVideo = videoPath.replace(".mp4", "_temp.mp4");
     await new Promise((resolve, reject) => {
         ffmpeg(videoPath)
@@ -186,21 +160,9 @@ export const cropVideoToDuration = async (videoPath, duration) => {
                 "-preset", "ultrafast",
                 "-an"
             ])
-            .on("progress", progress => {
-                console.log(`⏳ frame: ${progress.frames} | time: ${progress.timemark}`);
-            })
-            .on("end", () => {
-                console.log("✅ Video cropped");
-                resolve();
-            }).on("start", cmd => {
-                console.log("FFmpeg command:", cmd);
-            })
-            .on("stderr", line => {
-                console.log("FFmpeg:", line);
-            })
+            .on("end", () => resolve())
             .on("error", reject);
     });
-    console.log('<--- CROPPED VIDEO TO DURATION --->');
     // delete original video
     fs.unlinkSync(videoPath);
     // rename temp video to original video
@@ -221,7 +183,7 @@ export const addBurnedInASSSubtitles = async (videoPath, subtitlesPath) => {
                 .videoFilters(`ass='${subtitlesPath.replace(/\\/g, '/').replace(/:/g, '\\:')}'`)
                 .outputOptions(['-c:a', 'copy'])
                 .output(outputPath)
-                .on('end', () => { console.log('✅ Subtitles burned in'); resolve(); })
+                .on('end', () => resolve())
                 .on('error', (err) => { console.error('Error burning subtitles:', err); reject(err); })
                 .run();
         });

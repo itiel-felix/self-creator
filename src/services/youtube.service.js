@@ -15,7 +15,6 @@ export const searchYoutube = async (query, options = {}) => {
 
     const response = await fetch(`https://www.googleapis.com/youtube/v3/search?${params}`);
     const data = await response.json();
-    console.log('Youtube search response: ', data);
     // print data in cache/youtube.json
     // If cache/youtube.json exists, read it and return the data
     let cachedData = null;
