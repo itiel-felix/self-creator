@@ -1,10 +1,13 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import { downloadYoutubeVideo } from "./videoDownloader.js";
 import { getProcessedMainIdea } from "../services/deepSeek.service.js";
 import { timeToSeconds, getStartAndEndTimeFromVideoId } from "../utils.js";
 import { getYoutubeVideoUrl } from "../services/youtube.service.js";
 import { searchVideosInYoutube } from "../services/video.service.js";
 
-import clipProcessor from "../utils/clipProcessor.js";
+import processStreamingFrames from "../embeddings/processFrames.js";
 import fs from 'fs';
 import ffmpeg from "fluent-ffmpeg";
 
@@ -32,18 +35,11 @@ export const getVideos = async (mainIdeasOriginal) => {
         const cachedResults = JSON.parse(fs.readFileSync('./cache/results.json', 'utf8'));
         results = cachedResults;
     } else {
-        let promises = [];
         for (let index = 0; index < mainIdeas.length; index++) {
             const mainIdea = mainIdeas[index];
             console.log('-> Working on main idea: ', mainIdea.text, '(', index + 1, 'of', mainIdeas.length, ')')
-            promises.push(chooseVideoFromYoutube(mainIdea.text, usedVideosIds));
-
-            const isLastIteration = index === mainIdeas.length - 1;
-            if (promises.length === 3 || isLastIteration) {
-                const resultsFromPromises = await Promise.all(promises);
-                results.push(...resultsFromPromises);
-                promises = [];
-            }
+            const result = await chooseVideoFromYoutube(mainIdea, usedVideosIds);
+            results.push(result);
         }
         fs.writeFileSync('./cache/results.json', JSON.stringify(results, null, 2));
     }
@@ -94,7 +90,7 @@ export const getVideos = async (mainIdeasOriginal) => {
                 text: mainIdea.text
             });
         }
-        const shouldDownloadVideos = false;
+        const shouldDownloadVideos = true;
         if (shouldDownloadVideos) {
             const promises = videos.map(video => downloadFinalVideo(video.video_id));
             await Promise.all(promises);
@@ -133,9 +129,9 @@ const saveProcessedMainIdeas = async (mainIdea, processedMainIdeas) => {
  * @param {boolean} tooHard - Whether the main idea is too hard to process.
  * @returns {Promise<Object>} The processed main ideas.
  */
-const workMainIdeas = async (mainIdea, tooHard = false) => {
-    const processedMainIdeas = await getProcessedMainIdea(mainIdea, tooHard);
-    await saveProcessedMainIdeas(mainIdea, processedMainIdeas);
+const workMainIdeas = async (mainIdeaText, tooHard = false, mainIdeaOriginalText) => {
+    const processedMainIdeas = await getProcessedMainIdea(mainIdeaText, tooHard, [], mainIdeaOriginalText);
+    await saveProcessedMainIdeas(mainIdeaText, processedMainIdeas);
     return processedMainIdeas;
 }
 
@@ -148,8 +144,10 @@ const workMainIdeas = async (mainIdea, tooHard = false) => {
  */
 export const chooseVideoFromYoutube = async (mainIdea, usedVideosIds = []) => {
     let tooHard = false;
+    const mainIdeaText = mainIdea.text;
+    const mainIdeaOriginalText = mainIdea.original_text;
     do {
-        const processedMainIdeas = await workMainIdeas(mainIdea, tooHard);
+        const processedMainIdeas = await workMainIdeas(mainIdeaText, tooHard, mainIdeaOriginalText);
         for (let processedMainIdea of processedMainIdeas) {
             console.log('--> Checking videos for processed idea: ', processedMainIdea)
             const { videoId, tooHard: too_hard } = await checkVideosForMainIdea(processedMainIdea, usedVideosIds, tooHard);
@@ -178,16 +176,20 @@ const checkVideosForMainIdea = async (processedMainIdea, usedVideosIds = [], too
     const results = await searchVideosInYoutube(fullTerm);
     if (results.length === 0) {
         tooHard = true;
+        console.log('---> No video found for term: ', processedMainIdea);
         return { videoId: null, tooHard: true };
     }
-    for (let item of results) {
+
+    for (let index = 0; index < results.length; index++) {
+        const item = results[index];
         console.log('----> Checking item: ', getYoutubeVideoUrl(item.id))
-        const result = await checkResultItemForMainIdea(processedMainIdea, item, usedVideosIds);
+        const result = await checkResultItemForMainIdea(processedMainIdea, item, index + 1);
         const id = result?.videoId ?? result;
         if (id && typeof id === "string") {
             return { videoId: id };
         }
     }
+    console.log('--> No video found for term: ', processedMainIdea);
     return { videoId: null, tooHard: true };
 }
 
@@ -198,28 +200,42 @@ const checkVideosForMainIdea = async (processedMainIdea, usedVideosIds = [], too
  * @param {string[]} usedVideosIds - The IDs of the videos that have already been used.
  * @returns {Promise<{videoId: string, tooHard: boolean}>} The ID of the vertical video found.
  */
-const checkResultItemForMainIdea = async (mainIdea, item) => {
+const checkResultItemForMainIdea = async (mainIdea, item, index = 0) => {
     const videoId = item.id;
     try {
+        console.log('-----> Checking result item for term: ', mainIdea, ' - ', videoId, ' - ', index);
         const cacheDir = 'cache/videoInfo';
         const cachePath = `${cacheDir}/${videoId}.json`;
-        if (fs.existsSync(cachePath)) {
-            return {};
-        }
+        // if (fs.existsSync(cachePath)) {
+        //     return {};
+        // }
 
         if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
         fs.writeFileSync(cachePath, JSON.stringify(item, null, 2));
 
         // Check if there is frames and fram info of video id
-        const infoOfFrames = await framesAndFrameInfoExists(videoId);
-        if (infoOfFrames) {
-            return { videoId };
-        }
-        await donwloadAndExtractFramesOfAVideo(videoId);
-        const scores = await clipProcessor(mainIdea, videoId);
+        // const infoOfFrames = await framesAndFrameInfoExists(videoId);
+        // if (infoOfFrames) {
+        //     return { videoId };
+        // }
+        // Download video and process frames
+        console.log('------> Downloading video...');
+        const videoPath = await downloadVideo(videoId);
+        console.log('------> Video downloaded: ', videoPath);
+
+        // Select frames query for the video
+        console.log('------> Selecting frames query...');
+        const selectQuery = await selectFramesQueryForAVideo(videoPath);
+
+        console.log('------> Select query: ', selectQuery);
+        console.log('------> Starting to process frames...');
+        // Process frames and get scores
+        const scores = await processStreamingFrames(mainIdea, videoId, selectQuery);
+
+        console.log('------> Scores: ', scores);
         const sortingScores = scores.sort((a, b) => b[1] - a[1]);
-        const bestScore = sortingScores[0];
-        if (bestScore[1] >= 0.3) {
+        const bestScore = sortingScores?.[0];
+        if (bestScore?.[1] >= parseFloat(process.env.THRESHOLD_SIMILARITY)) {
             await writeVideoIdWithFrame(videoId, bestScore[0]);
             return { videoId };
         } else {
@@ -228,6 +244,8 @@ const checkResultItemForMainIdea = async (mainIdea, item) => {
         }
     }
     catch (error) {
+        console.error('------> Error checking result item for term: ', mainIdea, ' - ', videoId, ' - ', index, ' - ', error);
+        return null;
     }
 }
 
@@ -236,7 +254,7 @@ const checkResultItemForMainIdea = async (mainIdea, item) => {
  * @param {string} videoId - The ID of the video to download and extract frames from.
  * @returns {Promise<void>} A promise that resolves when the frames have been extracted.
  */
-const donwloadAndExtractFramesOfAVideo = async (videoId) => {
+const downloadVideo = async (videoId) => {
     const tempFolder = './temp/youtube';
     if (!fs.existsSync(tempFolder)) fs.mkdirSync(tempFolder);
     const videoPath = await downloadYoutubeVideo({
@@ -244,10 +262,12 @@ const donwloadAndExtractFramesOfAVideo = async (videoId) => {
         outputFolder: tempFolder,
         extraOptions: {
             format: "bv*[ext=mp4][height<=360]",
+            downloadSections: "*1-240",
         }
     });
-    await getRandomFramesOfAVideo(videoPath, videoId);
+    return videoPath;
 }
+
 
 /**
  * Writes a video ID with a frame name to a JSON file.
@@ -273,14 +293,7 @@ const writeVideoIdWithFrame = async (videoId, frameName) => {
  * @param {string} videoId - The ID of the video to extract frames from.
  * @returns {Promise<void>} A promise that resolves when the frames have been extracted.
  */
-const getRandomFramesOfAVideo = async (videoPath, videoId) => {
-    const framesFolder = `./frames/${videoId}`;
-    if (!fs.existsSync('./frames')) {
-        fs.mkdirSync('./frames');
-    }
-    if (!fs.existsSync(framesFolder)) fs.mkdirSync(framesFolder);
-    // await getFramesFromVideo(videoPath, framesFolder, "select='gt(scene,0.4)'");
-
+const selectFramesQueryForAVideo = async (videoPath) => {
 
     const videoDuration = await getVideoDuration(videoPath);
     const minutes = videoDuration / 60;
@@ -288,31 +301,15 @@ const getRandomFramesOfAVideo = async (videoPath, videoId) => {
 
     let selectQuery;
 
-    if (minutes > 10) {
-        selectQuery = "fps=1/20";
-    } else if (minutes > 5 && minutes < 10) {
+    if (minutes > 3 && minutes < 5) {
         selectQuery = "fps=1/15";
-    } else if (minutes > 3 && minutes < 5) {
-        selectQuery = "fps=1/10";
     } else if (minutes > 1 && minutes < 3) {
         selectQuery = "fps=1/5";
     } else {
         selectQuery = "fps=1";
     }
-    await getFramesFromVideo(videoPath, framesFolder, selectQuery);
+    return selectQuery;
 };
-
-const getFramesFromVideo = async (videoPath, framesFolder, filter = "select='gt(scene,0.3)'") => {
-    await new Promise((resolve, reject) => {
-        ffmpeg(videoPath)
-            .videoFilters(filter)
-            .outputOptions("-vsync vfr")
-            .output(`${framesFolder}/frame_%04d.jpg`)
-            .on("end", resolve)
-            .on("error", reject)
-            .run();
-    });
-}
 
 /**
  * Removes a video and its frames from the filesystem.

@@ -1,6 +1,8 @@
 import youtubedl from "youtube-dl-exec";
 import fs from 'fs';
 
+const MAX_VIDEOS = 1;
+
 /**
  * Search for videos in YouTube.
  * @param {string} searchWord - The word to search for.
@@ -14,7 +16,7 @@ export const searchVideosInYoutube = async (searchWord, minDuration = null) => {
     if (minDuration) {
         matchFilter = `duration > ${minDuration} & !is_live`;
     } else {
-        matchFilter = 'duration < 300 & !is_live';
+        matchFilter = 'duration < 240 & !is_live';
     }
     try {
         const results = await youtubedl(
@@ -23,16 +25,16 @@ export const searchVideosInYoutube = async (searchWord, minDuration = null) => {
                 dumpSingleJson: true,
                 noDownload: true,
                 matchFilter: matchFilter,
+                extractorArgs: "youtube:player_client=android,web",
                 flatPlaylist: true,
                 ignoreErrors: true,
-                extractorArgs: "youtube:player_client=android,web",
                 jsRuntimes: "node",
                 cookiesFromBrowser: "firefox"
             }
         );
         const { entries = [] } = results ?? {};
         if (entries.length === 0) await addBannedTerm(searchWord);
-        return entries;
+        return entries.slice(0, MAX_VIDEOS);
     } catch (error) {
         throw new Error(`Failed to search for videos: ${error}`);
     }

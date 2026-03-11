@@ -19,6 +19,9 @@ const calculateGoldenSecond = (number) => {
 
 const getStartAndEndTimeFromVideoId = (videoId, duration) => {
     const jsonPath = `./cache/frame_info.json`;
+    if (!fs.existsSync(jsonPath)) {
+        fs.writeFileSync(jsonPath, '{}');
+    }
     const frameInfo = JSON.parse(fs.readFileSync(jsonPath, 'utf8'))[videoId];
     const splittedBySlash = frameInfo?.split('/');
     const frameName = splittedBySlash[splittedBySlash.length - 1].split('.')[0];
@@ -39,6 +42,9 @@ const initializeCache = () => {
     if (!fs.existsSync('./cache/frame_info.json')) fs.writeFileSync('./cache/frame_info.json', '{}');
     if (!fs.existsSync('./temp')) fs.mkdirSync('./temp');
     if (!fs.existsSync('./temp/youtube')) fs.mkdirSync('./temp/youtube');
+    // Remove
+    if (fs.existsSync('./cache/videoInfo')) fs.rmdirSync('./cache/videoInfo', { recursive: true });
+    if (fs.existsSync('./cache/frame_info.json')) fs.unlinkSync('./cache/frame_info.json');
 }
 export {
     isVideoVertical,

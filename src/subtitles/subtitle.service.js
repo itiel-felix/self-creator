@@ -22,7 +22,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Main,Arial,110,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,3,0,2,80,80,720,1
+Style: Main,Impact,150,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,3,0,2,80,80,960,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`;
@@ -62,7 +62,7 @@ export const generateASS = (words) => {
         const duration = (endTime - current.start) * 1000;
         const zoomDuration = Math.min(200, duration * 0.25);
 
-        const text = `{\\fad(50,50)\\fs72\\t(0,${zoomDuration},\\fs140)\\t(${zoomDuration},${zoomDuration * 2},\\fs72)\\c&H00FFFF&\\bord2\\shad2}${current.word.toUpperCase()}`;
+        const text = `{\\fad(50,50)\\fs110\\t(0,${zoomDuration},\\fs170)\\t(${zoomDuration},${zoomDuration * 2},\\fs110)\\c&H00FFFF&\\bord6\\shad0}${current.word.toUpperCase()}`;
         lines.push(`Dialogue: 0,${start},${end},Main,,0,0,0,,${text}`);
     }
 

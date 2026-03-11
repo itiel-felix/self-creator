@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { mainIdeaSystemPrompt, processedMainIdeaSystemPrompt } from "./prompts.js";
+import { mainIdeaSystemPrompt, processedMainIdeaSystemPrompt } from "../utils/prompts.js";
 
 export const getMainIdea = async (transcriptionOfAudioInSrtFormat) => {
     const openai = new OpenAI({
@@ -24,18 +24,19 @@ export const getMainIdea = async (transcriptionOfAudioInSrtFormat) => {
 }
 
 
-export const getProcessedMainIdea = async (mainIdea, tooHard = false, burnedTerms = []) => {
+export const getProcessedMainIdea = async (mainIdeaText, tooHard = false, burnedTerms = [], mainIdeaOriginalText) => {
     const openai = new OpenAI({
         baseURL: 'https://api.deepseek.com',
         apiKey: process.env.DEEPSEEK_API_KEY,
     });
+    console.log('------> Getting processed main idea: ', mainIdeaText, ' - ', mainIdeaOriginalText);
     try {
         const burnedTermsString = burnedTerms.length > 0 ? `Avoid these terms: ${burnedTerms.join(', ')}` : '';
         const response = await openai.chat.completions.create({
             model: "deepseek-chat",
             messages: [
                 { role: "system", content: processedMainIdeaSystemPrompt() },
-                { role: "user", content: `Main idea: ${mainIdea}\n${burnedTermsString}` }
+                { role: "user", content: `-> Complete text: ${mainIdeaOriginalText}\n-> Idea: ${mainIdeaText}\n${burnedTermsString}` }
             ],
             response_format: { type: "json_object" }
         });
@@ -43,6 +44,6 @@ export const getProcessedMainIdea = async (mainIdea, tooHard = false, burnedTerm
         const parsedResponse = JSON.parse(raw);
         return parsedResponse;
     } catch (error) {
-        throw new Error(`Failed to get processed main idea: ${mainIdea}: ${error.message}`);
+        throw new Error(`Failed to get processed main idea: ${mainIdeaText}: ${error.message}`);
     }
 }

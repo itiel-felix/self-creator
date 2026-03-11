@@ -1,9 +1,8 @@
-import fs, { writeFileSync } from "fs";
-import path from "path";
 import { pipeline } from "stream/promises";
 import { Readable } from "stream";
 import { getYoutubeVideoUrl } from "../services/youtube.service.js";
 import youtubedl from "youtube-dl-exec";
+import fs from 'fs';
 
 const generateVideoId = () => Math.random().toString(36).substring(2, 15);
 
@@ -29,6 +28,7 @@ export const downloadYoutubeVideo = async ({
     const videoUrl = getYoutubeVideoUrl(videoId);
     const filePath = `${outputFolder}/${customName || videoId}.mp4`;
     if (fs.existsSync(filePath)) {
+        console.log('------> Video already downloaded: ', filePath);
         return filePath;
     }
     const baseOpt = {

@@ -8,7 +8,6 @@ output/
 
 # Transcription cache
 cache/
-embeddings/
 
 # Temp files
 temp/

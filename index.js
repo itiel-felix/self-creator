@@ -82,13 +82,17 @@ import { initializeCache } from "./src/utils.js";
         const verticalMergedVideoPath = await mergeSegmentsToVerticalScreen(newVideos, verticalMergedPath, audioPath);
 
         // Part 6: Burn subtitles
+        console.log('------> Burning subtitles...');
         const finalVerticalMergedPath = await addBurnedInASSSubtitles(verticalMergedVideoPath, subtitlesPath);
+        console.log('------> Subtitles burned: ', finalVerticalMergedPath);
 
         // Part 7: Cleanup temp video files
         // videos.forEach(v => { try { fs.unlinkSync(v.video_path); } catch { } });
 
     } catch (error) {
         console.error(error);
+    } finally {
+        console.log('Time taken: ', Date.now() - start, 'ms');
     }
 
 })();
