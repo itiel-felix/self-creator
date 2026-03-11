@@ -22,6 +22,7 @@ const getStartAndEndTimeFromVideoId = (videoId, duration) => {
     if (!fs.existsSync(jsonPath)) {
         fs.writeFileSync(jsonPath, '{}');
     }
+    console.log('------> Getting start and end time from video ID: ', videoId);
     const frameInfo = JSON.parse(fs.readFileSync(jsonPath, 'utf8'))[videoId];
     const splittedBySlash = frameInfo?.split('/');
     const frameName = splittedBySlash[splittedBySlash.length - 1].split('.')[0];
@@ -44,7 +45,7 @@ const initializeCache = () => {
     if (!fs.existsSync('./temp/youtube')) fs.mkdirSync('./temp/youtube');
     // Remove
     if (fs.existsSync('./cache/videoInfo')) fs.rmdirSync('./cache/videoInfo', { recursive: true });
-    if (fs.existsSync('./cache/frame_info.json')) fs.unlinkSync('./cache/frame_info.json');
+    // if (fs.existsSync('./cache/frame_info.json')) fs.unlinkSync('./cache/frame_info.json');
 }
 export {
     isVideoVertical,

@@ -8,7 +8,7 @@ const MAX_VIDEOS = 1;
  * @param {string} searchWord - The word to search for.
  * @returns {Promise<{id: string, title: string, description: string, thumbnail: string, duration: number, viewCount: number, likeCount: number, commentCount: number, channelId: string, channelTitle: string, channelUrl: string, channelThumbnail: string, channelSubscriberCount: number, channelVideoCount: number, channelViewCount: number}[]>} The videos found.
  */
-export const searchVideosInYoutube = async (searchWord, minDuration = null) => {
+export const searchVideosInYoutube = async (searchWord, minDuration = null, maxResults) => {
     if (await hasBannedTerm(searchWord)) {
         return [];
     }
@@ -20,7 +20,7 @@ export const searchVideosInYoutube = async (searchWord, minDuration = null) => {
     }
     try {
         const results = await youtubedl(
-            `ytsearch5:${searchWord}`,
+            `ytsearch${maxResults ?? '5'}:${searchWord}`,
             {
                 dumpSingleJson: true,
                 noDownload: true,
@@ -34,7 +34,7 @@ export const searchVideosInYoutube = async (searchWord, minDuration = null) => {
         );
         const { entries = [] } = results ?? {};
         if (entries.length === 0) await addBannedTerm(searchWord);
-        return entries.slice(0, MAX_VIDEOS);
+        return entries.slice(0, maxResults ?? MAX_VIDEOS);
     } catch (error) {
         throw new Error(`Failed to search for videos: ${error}`);
     }

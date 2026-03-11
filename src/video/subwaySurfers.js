@@ -8,15 +8,18 @@ const subwaySurfers = async (minDuration = 300) => {
     }
     let videoAlreadyDownloaded = true;
     do {
-        const youtubeVideo = await searchVideosInYoutube("subway surfers coinless run", minDuration);
-        if (fs.existsSync(`./temp/brainrot/${youtubeVideo[0].id}.mp4`)) {
-            videoAlreadyDownloaded = true;
-        } else {
-            videoAlreadyDownloaded = false;
-            // Download the video
-            const videoPath = await downloadYoutubeVideo({ videoId: youtubeVideo[0].id, outputFolder: './temp/brainrot', minDuration: minDuration });
-            // Extract frames from the video
-            return videoPath;
+        const youtubeVideo = await searchVideosInYoutube("subway surfers coinless run", minDuration, 10);
+
+        for (const video of youtubeVideo) {
+            if (fs.existsSync(`./temp/brainrot/${video.id}.mp4`)) {
+                videoAlreadyDownloaded = true;
+            } else {
+                videoAlreadyDownloaded = false;
+                // Download the video
+                const videoPath = await downloadYoutubeVideo({ videoId: video.id, outputFolder: './temp/brainrot', minDuration: minDuration });
+                // Extract frames from the video
+                return videoPath;
+            }
         }
     } while (videoAlreadyDownloaded);
 }

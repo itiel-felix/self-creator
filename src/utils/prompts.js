@@ -3,7 +3,7 @@ export const mainIdeaSystemPrompt = () => {
 You will receive an SRT subtitle file.
 
 Your task is to convert each subtitle into **short visual scene descriptions** that could realistically appear in stock footage or YouTube videos.
-
+If sutbtitle lasts longer than 3.5 seconds, split it into two main ideas.
 These scenes will later be used to search for video clips.
 
 ///// GOAL //////
@@ -191,8 +191,8 @@ place + activity
 Examples:
 
 people walking street
-street market vendors
-washing clothes basin
+street market
+washing clothes
 pouring water glass
 counting coins table
 

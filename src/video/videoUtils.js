@@ -48,18 +48,22 @@ export const getVideos = async (mainIdeasOriginal) => {
     for (let i = 0; i < mainIdeas.length; i++) {
         const mainIdea = mainIdeas[i];
         const result = results[i];
+        const nextMainIdea = mainIdeas[i + 1];
         const newStartTime = i === 0 ? '00:00:00,000' : mainIdea.start_time;
-        const key = `${mainIdea.text}-${newStartTime}-${mainIdea.end_time}`;
-        const videoDuration = timeToSeconds(mainIdea.end_time) - timeToSeconds(newStartTime);
+        // Alargar hasta el start de la siguiente idea para abarcar silencios del audio
+        const segmentEndTime = nextMainIdea ? nextMainIdea.start_time : mainIdea.end_time;
+        const videoDuration = timeToSeconds(segmentEndTime) - timeToSeconds(newStartTime);
 
         const { start_time: videoStart_time, end_time: videoEnd_time } = getStartAndEndTimeFromVideoId(result.videoId, videoDuration);
-
+        const key = `${mainIdea.text}-${newStartTime}-${segmentEndTime}`;
         const newMainIdea = {
             ...mainIdea,
             start_time: newStartTime,
+            end_time: segmentEndTime,
             video_id: result.videoId,
             video_start_time: videoStart_time,
-            video_end_time: videoEnd_time
+            video_end_time: videoEnd_time,
+            duration: videoDuration
         }
         newMainIdeas.push(newMainIdea);
 
@@ -69,18 +73,19 @@ export const getVideos = async (mainIdeasOriginal) => {
             videoByKeyword[key] = videoId;
         }
     }
+    console.log("Full duration of new main ideas: ", newMainIdeas.reduce((acc, mainIdea) => acc + mainIdea.duration, 0));
+    // Werite main ideas in results.json
+    fs.writeFileSync('./cache/results.json', JSON.stringify(results, null, 2));
+    fs.writeFileSync('./cache/newMainIdeas.json', JSON.stringify(newMainIdeas, null, 2));
 
     try {
         for (let i = 0; i < newMainIdeas.length; i++) {
             const mainIdea = newMainIdeas[i];
-            const nextMainIdea = newMainIdeas[i + 1];
             const videoPath = `./temp/youtube/${mainIdea.video_id}.mp4`;
 
             // Alargar hasta la siguiente idea: de start_time hasta el start_time de la siguiente (o hasta end_time si es la última)
-            const startSec = timeToSeconds(mainIdea.start_time);
-            const endSec = nextMainIdea
-                ? timeToSeconds(nextMainIdea.start_time)
-                : timeToSeconds(mainIdea.end_time);
+            const startSec = mainIdea.video_start_time;
+            const endSec = mainIdea.video_end_time;
             const segmentDuration = endSec - startSec;
             videos.push({
                 video_id: mainIdea.video_id,
@@ -90,7 +95,10 @@ export const getVideos = async (mainIdeasOriginal) => {
                 text: mainIdea.text
             });
         }
-        const shouldDownloadVideos = true;
+        const shouldDownloadVideos = false;
+        console.log("Video IDs")
+        console.log(videos.map(video => video.video_id));
+        console.log("--------------------------------");
         if (shouldDownloadVideos) {
             const promises = videos.map(video => downloadFinalVideo(video.video_id));
             await Promise.all(promises);
@@ -214,10 +222,10 @@ const checkResultItemForMainIdea = async (mainIdea, item, index = 0) => {
         fs.writeFileSync(cachePath, JSON.stringify(item, null, 2));
 
         // Check if there is frames and fram info of video id
-        // const infoOfFrames = await framesAndFrameInfoExists(videoId);
-        // if (infoOfFrames) {
-        //     return { videoId };
-        // }
+        const infoOfFrames = await framesAndFrameInfoExists(videoId);
+        if (infoOfFrames) {
+            return { videoId };
+        }
         // Download video and process frames
         console.log('------> Downloading video...');
         const videoPath = await downloadVideo(videoId);
@@ -228,9 +236,9 @@ const checkResultItemForMainIdea = async (mainIdea, item, index = 0) => {
         const selectQuery = await selectFramesQueryForAVideo(videoPath);
 
         console.log('------> Select query: ', selectQuery);
-        console.log('------> Starting to process frames...');
-        // Process frames and get scores
-        const scores = await processStreamingFrames(mainIdea, videoId, selectQuery);
+        await extractFramesToDisk(videoPath, videoId, selectQuery);
+        console.log('------> Starting to process frames (from disk)...');
+        const scores = await processStreamingFrames(mainIdea, videoId);
 
         console.log('------> Scores: ', scores);
         const sortingScores = scores.sort((a, b) => b[1] - a[1]);
@@ -309,6 +317,38 @@ const selectFramesQueryForAVideo = async (videoPath) => {
         selectQuery = "fps=1";
     }
     return selectQuery;
+};
+
+/**
+ * Extracts frames from a video to disk (./frames/{videoId}/frame_0001.jpg, ...).
+ * Skips if folder already has frames. Allows resuming and re-running CLIP later.
+ * @param {string} videoPath - Path to the video file
+ * @param {string} videoId - YouTube video ID (used for folder name)
+ * @param {string} selectQuery - ffmpeg filter e.g. "fps=1/15"
+ * @returns {Promise<string>} Frames folder path
+ */
+const extractFramesToDisk = async (videoPath, videoId, selectQuery) => {
+    const framesFolder = `./frames/${videoId}`;
+    if (!fs.existsSync("./frames")) fs.mkdirSync("./frames", { recursive: true });
+    if (!fs.existsSync(framesFolder)) fs.mkdirSync(framesFolder, { recursive: true });
+    const existing = fs.readdirSync(framesFolder).filter((f) => f.endsWith(".jpg"));
+    if (existing.length > 0) {
+        console.log(`------> Frames already on disk (${existing.length}), skipping extraction`);
+        return framesFolder;
+    }
+    const outputPattern = `${framesFolder}/frame_%04d.jpg`;
+    await new Promise((resolve, reject) => {
+        ffmpeg(videoPath)
+            .inputOptions(["-nostdin"])
+            .videoFilters([selectQuery, "scale=224:224"])
+            .outputOptions(["-vsync", "vfr"])
+            .output(outputPattern)
+            .on("end", () => resolve())
+            .on("error", (err) => reject(err))
+            .run();
+    });
+    console.log(`------> Frames extracted to ${framesFolder}`);
+    return framesFolder;
 };
 
 /**

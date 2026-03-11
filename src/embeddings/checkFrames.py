@@ -4,12 +4,12 @@ from PIL import Image
 import sys
 import json
 import numpy as np
-import io
-import time
 import os
 import hashlib
 
 query = sys.argv[1]
+video_id = sys.argv[2]
+frames_folder = os.path.join(".", "frames", video_id)
 
 CACHE_DIR = "cache/text_embeddings"
 
@@ -32,16 +32,14 @@ def save_text_embedding_to_cache(q, vec):
     np.save(path, vec.astype(np.float32))
 
 
+import time
 start_time = time.time()
 device = "mps" if torch.backends.mps.is_available() else "cpu"
-use_fp16 = device != "cpu"
 model, _, preprocess = open_clip.create_model_and_transforms(
     "ViT-B-32",
     pretrained="laion2b_s34b_b79k"
 )
 model = model.to(device)
-if use_fp16:
-    model = model.half()
 model.eval()
 
 # Try cache first to skip ~1s of encode_text
@@ -51,12 +49,11 @@ if text_vec is not None:
 else:
     tokenizer = open_clip.get_tokenizer("ViT-B-32")
     text = tokenizer([query]).to(device)
-    start_time = time.time()
-    with torch.inference_mode():
+    with torch.no_grad():
         log('Encoding text...')
         text_features = model.encode_text(text)
         text_features /= text_features.norm(dim=-1, keepdim=True)
-    text_vec = text_features.cpu().float().numpy().squeeze().astype(np.float32)
+    text_vec = text_features.cpu().numpy().squeeze().astype(np.float32)
     save_text_embedding_to_cache(query, text_vec)
     log(f'Text features, time: {time.time() - start_time:.2f}s')
 
@@ -64,64 +61,40 @@ threshold = float(os.getenv("THRESHOLD_SIMILARITY", 0.25))
 results = []
 
 batch_size = int(os.getenv("CLIP_BATCH_SIZE", "32"))
-buffer = b""
-images = []
-frame_index = 0
+frame_files = sorted(
+    f for f in os.listdir(frames_folder)
+    if f.endswith(".jpg")
+)
 
-def process_batch(images, start_index):
-    batch = torch.stack(images).to(device, non_blocking=True)
-    if use_fp16:
-        batch = batch.half()
+def process_batch(images, start_index, file_names):
+    batch = torch.stack(images).to(device)
 
-    with torch.inference_mode():
+    with torch.no_grad():
         image_features = model.encode_image(batch)
         image_features /= image_features.norm(dim=-1, keepdim=True)
 
-    image_vecs = image_features.cpu().float().numpy().astype(np.float32)
+    image_vecs = image_features.cpu().numpy().astype(np.float32)
 
     for j, image_vec in enumerate(image_vecs):
+        frame_name = file_names[start_index + j]
         similarity = round(float(np.dot(image_vec, text_vec)), 3)
-        frame_name = f"frame_{start_index + j:04d}.jpg"
+        log(f'Frame {frame_name} with similarity {similarity}')
         results.append((frame_name, similarity))
         if similarity > threshold:
-            log(f'Frame {frame_name} with similarity {similarity} found')
+            log(f'Frame {frame_name} with similarity GOOD {similarity} found')
             log(f'Time taken: {time.time() - start_time:.2f}s')
             print(json.dumps([[frame_name, similarity]]), flush=True)
             sys.exit(0)
 
-while True:
-    chunk = sys.stdin.buffer.read(65536)
-    if not chunk:
-        break
+for start_idx in range(0, len(frame_files), batch_size):
+    batch_files = frame_files[start_idx : start_idx + batch_size]
+    images = []
+    for f in batch_files:
+        img = Image.open(os.path.join(frames_folder, f)).convert("RGB")
+        tensor = preprocess(img)
+        images.append(tensor)
+    process_batch(images, start_idx, frame_files)
 
-    buffer += chunk
-
-    while True:
-
-        start = buffer.find(b'\xff\xd8')
-        end = buffer.find(b'\xff\xd9')
-
-        if start != -1 and end != -1 and end > start:
-
-            jpg = buffer[start:end+2]
-            buffer = buffer[end+2:]
-
-            img = Image.open(io.BytesIO(jpg)).convert("RGB")
-            tensor = preprocess(img)
-
-            images.append(tensor)
-
-            if len(images) == batch_size:
-                process_batch(images, frame_index)
-                frame_index += batch_size
-                images = []
-
-        else:
-            break
-
-
-if images:
-    process_batch(images, frame_index)
 results.sort(key=lambda x: x[1], reverse=True)
 log(f'Total time taken: {time.time() - start_time:.2f}s')
 print(json.dumps(results[:10]), flush=True)
