@@ -135,7 +135,7 @@ const saveProcessedMainIdeas = async (mainIdea, processedMainIdeas) => {
  * Calls for DeepSeek to get query options for a main idea.
  * @param {string} mainIdea - The main idea to work on.
  * @param {boolean} tooHard - Whether the main idea is too hard to process.
- * @returns {Promise<Object>} The processed main ideas.
+ * @returns {Promise<Object<{search_queries: string, visual_prompts: string}>>} The processed main ideas.
  */
 const workMainIdeas = async (mainIdeaText, tooHard = false, mainIdeaOriginalText) => {
     const processedMainIdeas = await getProcessedMainIdea(mainIdeaText, tooHard, [], mainIdeaOriginalText);

@@ -14,9 +14,9 @@ export const searchVideosInYoutube = async (searchWord, minDuration = null, maxR
     }
     let matchFilter = '';
     if (minDuration) {
-        matchFilter = `duration > ${minDuration} & !is_live`;
+        matchFilter = `duration > ${minDuration} & !is_live & !is_unplayable`;
     } else {
-        matchFilter = 'duration < 240 & !is_live';
+        matchFilter = 'duration < 240 & !is_live & !is_unplayable';
     }
     try {
         const results = await youtubedl(

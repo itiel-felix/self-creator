@@ -55,8 +55,8 @@ import { initializeCache } from "./src/utils.js";
 
         // Part 5: Merge videos with audio
         const mergedPath = './output/merged_video.mp4';
-        // console.log('------> Merging upper videos...');
-        // const mergedVideoPath = await cutAndConcatSegments(videos, mergedPath);
+        console.log('------> Merging upper videos...');
+        const mergedVideoPath = await cutAndConcatSegments(videos, mergedPath);
         const mergedVideoLenght = await getVideoDuration(mergedPath);
         console.log('------> Merged video length: ', mergedVideoLenght);
         // Part 6: Download subway surfers video

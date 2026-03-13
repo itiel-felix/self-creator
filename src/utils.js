@@ -45,6 +45,7 @@ const initializeCache = () => {
     if (!fs.existsSync('./temp/youtube')) fs.mkdirSync('./temp/youtube');
     // Remove
     if (fs.existsSync('./cache/videoInfo')) fs.rmdirSync('./cache/videoInfo', { recursive: true });
+    if (fs.existsSync('./output/subtitles.ass')) fs.rmSync('./output/subtitles.ass', { recursive: true });
     // if (fs.existsSync('./cache/frame_info.json')) fs.unlinkSync('./cache/frame_info.json');
 }
 export {

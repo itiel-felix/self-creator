@@ -16,9 +16,12 @@ const subwaySurfers = async (minDuration = 300) => {
             } else {
                 videoAlreadyDownloaded = false;
                 // Download the video
-                const videoPath = await downloadYoutubeVideo({ videoId: video.id, outputFolder: './temp/brainrot', minDuration: minDuration });
-                // Extract frames from the video
-                return videoPath;
+                try {
+                    const videoPath = await downloadYoutubeVideo({ videoId: video.id, outputFolder: './temp/brainrot', minDuration: minDuration });
+                    return videoPath;
+                } catch (error) {
+                    console.error('Error downloading video: ', error);
+                }
             }
         }
     } while (videoAlreadyDownloaded);
