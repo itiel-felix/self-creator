@@ -8,12 +8,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
  * Runs CLIP on frames already on disk at ./frames/{videoId}/.
  * Expects frames to have been extracted by extractFramesToDisk (videoUtils) first.
  */
-export default async function processStreamingFrames(mainIdea, videoId) {
+export default async function processStreamingFrames(visual_prompts, videoId) {
     const checkScript = path.join(__dirname, "checkFrames.py");
     const pythonBin = path.join(process.cwd(), ".venv", "bin", "python");
-    const formattedMainIdea = "a picture of " + mainIdea;
 
-    const py = spawn(pythonBin, ["-u", checkScript, formattedMainIdea, videoId], {
+    const py = spawn(pythonBin, ["-u", checkScript, visual_prompts, videoId], {
         cwd: process.cwd(),
     });
     let data = "";

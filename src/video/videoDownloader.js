@@ -53,6 +53,7 @@ export const downloadYoutubeVideo = async ({
         output: filePath,
         format: "bv*[ext=mp4][height<=1080]",
         mergeOutputFormat: "mp4",
+        externalDownloader: "aria2c",
         ...baseOpt,
         ...extraOptions
     });

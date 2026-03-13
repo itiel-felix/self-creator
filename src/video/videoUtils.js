@@ -54,8 +54,14 @@ export const getVideos = async (mainIdeasOriginal) => {
         const segmentEndTime = nextMainIdea ? nextMainIdea.start_time : mainIdea.end_time;
         const videoDuration = timeToSeconds(segmentEndTime) - timeToSeconds(newStartTime);
 
-        const { start_time: videoStart_time, end_time: videoEnd_time } = getStartAndEndTimeFromVideoId(result.videoId, videoDuration);
+        const videoPath = `./temp/youtube/${result.videoId}.mp4`;
+        let actualVideoDuration = null;
+        if (fs.existsSync(videoPath)) {
+            actualVideoDuration = await getVideoDuration(videoPath);
+        }
+        const { start_time: videoStart_time, end_time: videoEnd_time } = getStartAndEndTimeFromVideoId(result.videoId, videoDuration, actualVideoDuration);
         const key = `${mainIdea.text}-${newStartTime}-${segmentEndTime}`;
+        console.log('------> Key: ', key);
         const newMainIdea = {
             ...mainIdea,
             start_time: newStartTime,
@@ -76,6 +82,7 @@ export const getVideos = async (mainIdeasOriginal) => {
     console.log("Full duration of new main ideas: ", newMainIdeas.reduce((acc, mainIdea) => acc + mainIdea.duration, 0));
     // Werite main ideas in results.json
     fs.writeFileSync('./cache/results.json', JSON.stringify(results, null, 2));
+    console.log('------> New main ideas: ', newMainIdeas);
     fs.writeFileSync('./cache/newMainIdeas.json', JSON.stringify(newMainIdeas, null, 2));
 
     try {
@@ -156,9 +163,10 @@ export const chooseVideoFromYoutube = async (mainIdea, usedVideosIds = []) => {
     const mainIdeaOriginalText = mainIdea.original_text;
     do {
         const processedMainIdeas = await workMainIdeas(mainIdeaText, tooHard, mainIdeaOriginalText);
-        for (let processedMainIdea of processedMainIdeas) {
+        const { search_queries, visual_prompts } = processedMainIdeas;
+        for (let processedMainIdea of search_queries) {
             console.log('--> Checking videos for processed idea: ', processedMainIdea)
-            const { videoId, tooHard: too_hard } = await checkVideosForMainIdea(processedMainIdea, usedVideosIds, tooHard);
+            const { videoId, tooHard: too_hard } = await checkVideosForMainIdea(processedMainIdea, visual_prompts, tooHard);
             if (videoId) {
                 console.log('--> Video found:', videoId)
                 usedVideosIds.push(videoId);
@@ -179,9 +187,9 @@ export const chooseVideoFromYoutube = async (mainIdea, usedVideosIds = []) => {
  * @param {boolean} tooHard - Whether the main idea is too hard to process.
  * @returns {Promise<{videoId: string, tooHard: boolean}>} The ID of the vertical video found.
  */
-const checkVideosForMainIdea = async (processedMainIdea, usedVideosIds = [], tooHard = false) => {
+const checkVideosForMainIdea = async (processedMainIdea, visual_prompts, tooHard = false) => {
     const fullTerm = `${processedMainIdea}`;
-    const results = await searchVideosInYoutube(fullTerm);
+    const results = await searchVideosInYoutube(fullTerm, null, 5);
     if (results.length === 0) {
         tooHard = true;
         console.log('---> No video found for term: ', processedMainIdea);
@@ -191,7 +199,7 @@ const checkVideosForMainIdea = async (processedMainIdea, usedVideosIds = [], too
     for (let index = 0; index < results.length; index++) {
         const item = results[index];
         console.log('----> Checking item: ', getYoutubeVideoUrl(item.id))
-        const result = await checkResultItemForMainIdea(processedMainIdea, item, index + 1);
+        const result = await checkResultItemForMainIdea(processedMainIdea, visual_prompts, item, index + 1);
         const id = result?.videoId ?? result;
         if (id && typeof id === "string") {
             return { videoId: id };
@@ -208,7 +216,7 @@ const checkVideosForMainIdea = async (processedMainIdea, usedVideosIds = [], too
  * @param {string[]} usedVideosIds - The IDs of the videos that have already been used.
  * @returns {Promise<{videoId: string, tooHard: boolean}>} The ID of the vertical video found.
  */
-const checkResultItemForMainIdea = async (mainIdea, item, index = 0) => {
+const checkResultItemForMainIdea = async (mainIdea, visual_prompts, item, index = 0) => {
     const videoId = item.id;
     try {
         console.log('-----> Checking result item for term: ', mainIdea, ' - ', videoId, ' - ', index);
@@ -238,7 +246,7 @@ const checkResultItemForMainIdea = async (mainIdea, item, index = 0) => {
         console.log('------> Select query: ', selectQuery);
         await extractFramesToDisk(videoPath, videoId, selectQuery);
         console.log('------> Starting to process frames (from disk)...');
-        const scores = await processStreamingFrames(mainIdea, videoId);
+        const scores = await processStreamingFrames(visual_prompts, videoId);
 
         console.log('------> Scores: ', scores);
         const sortingScores = scores.sort((a, b) => b[1] - a[1]);

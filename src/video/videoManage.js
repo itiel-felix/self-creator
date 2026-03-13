@@ -40,6 +40,11 @@ export const cutAndConcatSegments = async (videos, outputFile) => {
             const video = videos[i];
             const tempFile = `${tempFolder}/temp_segment_${i}.mp4`;
             tempFiles.push(tempFile);
+            console.log('------> Cutting segment ' + (i) + ':', video.video_path);
+            console.log('------> Start time:', video.start_time);
+            console.log('------> Duration:', video.final_duration);
+            console.log('------> Video filters:', videoFilters);
+            console.log('------> Output file:', tempFile);
 
             await new Promise((resolve, reject) => {
                 ffmpeg(video.video_path)
@@ -79,7 +84,11 @@ export const cutAndConcatSegments = async (videos, outputFile) => {
                 .outputOptions(['-c:v', 'libx264', '-preset', 'fast', '-vsync', 'cfr', '-r', '30', '-an'])
                 .output(outputFile)
                 .on('end', () => resolve())
-                .on('error', (err) => { console.error('Error merging:', err); reject(err); })
+                .on('error', (err) => {
+                    console.error('Error merging:', err);
+                    console.error('Concat list path:', concatListPath);
+                    reject(err);
+                })
                 .run();
         });
         fs.unlinkSync(concatListPath);
