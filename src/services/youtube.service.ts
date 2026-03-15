@@ -1,13 +1,14 @@
+import fs from "fs";
 
-export const getYoutubeVideoUrl = (videoId) => `https://www.youtube.com/watch?v=${videoId}`;
+export const getYoutubeVideoUrl = (videoId: string): string => `https://www.youtube.com/watch?v=${videoId}`;
 
-export const searchYoutube = async (query, options = {}) => {
+export const searchYoutube = async (query: string, options: Record<string, unknown> = {}): Promise<any> => {
     const params = new URLSearchParams({
-        key: process.env.GOOGLE_API_KEY,
+        key: process.env.GOOGLE_API_KEY!,
         part: "snippet",
         type: "video",
         q: query,
-        maxResults: 10,
+        maxResults: "10",
         order: 'relevance',
         videoDuration: 'short',
         videoDefinition: 'high',
@@ -15,9 +16,7 @@ export const searchYoutube = async (query, options = {}) => {
 
     const response = await fetch(`https://www.googleapis.com/youtube/v3/search?${params}`);
     const data = await response.json();
-    // print data in cache/youtube.json
-    // If cache/youtube.json exists, read it and return the data
-    let cachedData = null;
+    let cachedData: any = null;
     if (fs.existsSync('cache/youtube.json')) {
         cachedData = JSON.parse(fs.readFileSync('cache/youtube.json', 'utf8'));
         if (cachedData.query === query) {
@@ -33,9 +32,9 @@ export const searchYoutube = async (query, options = {}) => {
     return data;
 }
 
-export const getVideosByIds = async (videoIds) => {
+export const getVideosByIds = async (videoIds: string[]): Promise<any> => {
     const params = new URLSearchParams({
-        key: process.env.GOOGLE_API_KEY,
+        key: process.env.GOOGLE_API_KEY!,
         part: "snippet",
         id: videoIds.join(','),
     });
@@ -43,4 +42,3 @@ export const getVideosByIds = async (videoIds) => {
     const data = await response.json();
     return data;
 }
-

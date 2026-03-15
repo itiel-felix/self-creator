@@ -1,4 +1,43 @@
-export const mainIdeaSystemPrompt = () => {
+export const mainIdeaSystemPrompt = (typeOfVideo: string = "curiosity"): string => {
+  if (typeOfVideo === "videogame") {
+    return `
+You will receive an SRT subtitle file.
+
+Your task is, for each subtitile, you are gonna give me an object with the following fields:
+"start_time": "HH:MM:SS,mmm",
+"end_time": "HH:MM:SS,mmm",
+"text": "videogame name",
+"original_text": "original subtitle text"
+
+If sutbtitle lasts longer than 3.5 seconds, split it into two objects. 
+
+///// SEGMENT RULES //////
+
+1. Extract the text from each subtitle.
+2. Use the videogame name to fill "text" field.
+3. Each segment must:
+
+   * be at least **0.5 seconds**
+   * be at most **2 seconds**
+4. Use the original text to fill "original_text" field.
+4. Maintain the same videgoame name across all objects.
+
+///// OUTPUT FORMAT //////
+
+Return ONLY a JSON array with this structure:
+
+[
+{
+"start_time": "HH:MM:SS,mmm",
+"end_time": "HH:MM:SS,mmm",
+"text": "videogame name",
+"original_text": "original subtitle text"
+}
+]
+
+
+  `;
+  }
   return `
 You will receive an SRT subtitle file.
 
@@ -155,7 +194,39 @@ Notes:
 `;
 }
 
-export const processedMainIdeaSystemPrompt = () => {
+export const processedMainIdeaSystemPrompt = (typeOfVideo: string = "curiosity"): string => {
+  if (typeOfVideo === "videogame") {
+    return `
+Ill give you a videogame name. You will generate a search query and visual prompts for CLIP video matching.
+    INPUT
+    • complete_text → videogame name
+    • idea → videogame name
+
+    OUTPUT
+
+    Return a JSON object with:
+    • search_queries → 7 
+    • visual_prompts → 7 Use same as search queries, no more, no less.
+
+    examples:
+    {
+      "search_queries": [
+        "Street Fighter",
+        "Street Fighter gameplay",
+        "Street Fighter characters",
+        "Street Fighter stages",
+        "Street Fighter moves",
+      ],
+      "visual_prompts": [
+        "Street Fighter gameplay",
+        "Street Fighter characters",
+        "Street Fighter stages",
+        "Street Fighter moves",
+        "Street Fighter combos",
+      ]
+    }
+  `;
+  }
   return `
 You generate **YouTube search queries** and **visual prompts for CLIP video matching**.
 
@@ -332,17 +403,49 @@ Example:
 }
 `;
 }
-/**
-  "search_queries":[
-    "counting coins table",
-    "hands counting money",
-    "person counting coins",
-    "money coins table"
-    ],
-  "visual_prompts":[
-    "person counting coins",
-    "hands counting money",
-    "coins on table",
-    "person holding coins"
-  ]
- */
+
+
+export const searchQueriesSystemPrompt = (banned_terms: string[] = []): string => {
+  return `
+    You will receive a videogame name. You will generate a search query and visual prompts for CLIP video matching.
+    
+    /////// RULES ///////
+    The search queries must be related to the videogame name and must be generic enough to find videos on YouTube.
+    The search queries must be in English.
+    The search queries must be unique.
+    The search queries must be related to the videogame name.
+    ${banned_terms.length > 0 ? `Avoid these terms: ${banned_terms.join(', ')}, we already used them in the past.` : ''}
+
+    INPUT
+    • video game name → "Street Fighter"
+
+    OUTPUT
+    Return a JSON object with:
+    • search_queries → 10 YouTube search queries, sorted by relevance
+
+    /////// EXAMPLES ///////
+
+    INPUT: "Street Fighter"
+    OUTPUT:
+    {
+      "search_queries": [
+        "Street Fighter",
+        "Street Fighter gameplay",
+        "Street Fighter combos",
+        "Street Fighter 6",
+        "Street Fighter 2",
+      ]
+    }
+
+    INPUT: "SUPER MARIO BROS"
+    OUTPUT:
+    {
+      "search_queries": [
+        "Super Mario Level 1",
+        "Super Mario Bros 3D land gameplay",
+        "Super Mario Odyssey gameplay",
+        "Super Mario 64 stars",
+      ]
+    }
+  `;
+}

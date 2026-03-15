@@ -5,7 +5,6 @@ const toSrtTime = (seconds) => {
     const ms = Math.round((seconds % 1) * 1000);
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},${String(ms).padStart(3, '0')}`;
 };
-
 const toAssTime = (seconds) => {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
@@ -13,7 +12,6 @@ const toAssTime = (seconds) => {
     const cs = Math.round((seconds % 1) * 100);
     return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(cs).padStart(2, '0')}`;
 };
-
 const ASS_HEADER = `[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
@@ -26,45 +24,27 @@ Style: Main,Impact,180,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`;
-
-/**
- * Converts WhisperX segments to a standard SRT string.
- * @param {Object[]} segments - WhisperX segments array
- * @returns {string} SRT file content
- */
 export const generateSRT = (segments) => {
     return segments
         .map((segment, i) => {
-            const start = toSrtTime(segment.start);
-            const end = toSrtTime(segment.end);
-            return `${i + 1}\n${start} --> ${end}\n${segment.text.trim()}`;
-        })
+        const start = toSrtTime(segment.start);
+        const end = toSrtTime(segment.end);
+        return `${i + 1}\n${start} --> ${end}\n${segment.text.trim()}`;
+    })
         .join('\n\n');
 };
-
-/**
- * Generates an ASS subtitle file with TikTok-style word-by-word animation.
- * Each word is shown one at a time with a zoom pop effect.
- * @param {Object[]} words - Array of { word, start, end } from WhisperX
- * @returns {string} ASS file content
- */
 export const generateASS = (words) => {
     const lines = [ASS_HEADER];
-
     for (let i = 0; i < words.length; i++) {
         const current = words[i];
         const next = words[i + 1];
-
         const start = toAssTime(current.start);
         const endTime = next && (next.start - current.end) < 0.5 ? next.start : current.end;
         const end = toAssTime(endTime);
-
         const duration = (endTime - current.start) * 1000;
         const zoomDuration = Math.min(200, duration * 0.25);
-
         const text = `{\\fad(50,50)\\fs110\\t(0,${zoomDuration},\\fs170)\\t(${zoomDuration},${zoomDuration * 2},\\fs110)\\c&H00FFFF&\\bord6\\shad0}${current.word.toUpperCase()}`;
         lines.push(`Dialogue: 0,${start},${end},Main,,0,0,0,,${text}`);
     }
-
     return lines.join('\n');
 };

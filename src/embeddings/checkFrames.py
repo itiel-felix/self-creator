@@ -10,7 +10,11 @@ import time
 
 raw_queries = sys.argv[1]
 video_id = sys.argv[2]
-frames_folder = os.path.join(".", "frames", video_id)
+type = sys.argv[3]
+if type == "frames":
+    frames_folder = os.path.join(".", "frames", video_id)
+elif type == "thumbnails":
+    frames_folder = os.path.join(".", "temp", "thumbnails", video_id)
 
 try:
     queries = json.loads(raw_queries)
@@ -53,6 +57,7 @@ model, _, preprocess = open_clip.create_model_and_transforms(
 )
 model = model.to(device)
 model.eval()
+log(f'Model loaded in {time.time() - start_time:.2f}s')
 
 # Encode all queries (5 words) at once; use cache per query
 cached_vecs = {}
@@ -88,13 +93,16 @@ else:
 
 text_vecs = np.stack(text_vecs, axis=0)  # shape: (num_queries, dim)
 
-threshold = float(os.getenv("THRESHOLD_SIMILARITY", 0.25))
+if type == "frames":
+    threshold = float(os.getenv("THRESHOLD_SIMILARITY", 0.25))
+elif type == "thumbnails":
+    threshold = float(os.getenv("THRESHOLD_SIMILARITY_THUMBNAIL", 0.35))
 results = []
 
 batch_size = int(os.getenv("CLIP_BATCH_SIZE", "32"))
 frame_files = sorted(f for f in os.listdir(frames_folder) if f.endswith(".jpg"))
 
-
+start_time = time.time()
 def process_batch(images, start_index, file_names):
     batch = torch.stack(images).to(device)
 
@@ -113,7 +121,7 @@ def process_batch(images, start_index, file_names):
         results.append((frame_name, best_sim))
         if best_sim > threshold:
             log(f"Frame {frame_name} with similarity GOOD {best_sim} found")
-            log(f"Time taken: {time.time() - start_time:.2f}s")
+            log(f'Time taken: {time.time() - start_time:.2f}s')
             print(json.dumps([[frame_name, best_sim]]), flush=True)
             sys.exit(0)
 

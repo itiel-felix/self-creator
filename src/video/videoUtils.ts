@@ -3,119 +3,15 @@ dotenv.config();
 
 import { downloadYoutubeVideo } from "./videoDownloader.js";
 import { getProcessedMainIdea } from "../services/deepSeek.service.js";
-import { timeToSeconds, getStartAndEndTimeFromVideoId } from "../utils.js";
 import { getYoutubeVideoUrl } from "../services/youtube.service.js";
 import { searchVideosInYoutube } from "../services/video.service.js";
 
 import processStreamingFrames from "../embeddings/processFrames.js";
 import fs from 'fs';
 import ffmpeg from "fluent-ffmpeg";
+import { isThumbnailAcceptable } from "./processThumbnails.js";
 
-// We are using 2 types of start time
-// 1. The start time of the main idea, it means, the time that the idea should be shown in the final video
-// 2. The start time of the video selected
-export const getVideos = async (mainIdeasOriginal) => {
-    const shouldUseMainIdeasCache = true
-    let mainIdeas = [];
-    if (shouldUseMainIdeasCache) {
-        mainIdeas = JSON.parse(fs.readFileSync('./cache/mainIdeas.json', 'utf8'));
-    } else {
-        mainIdeas = mainIdeasOriginal;
-    }
-    const videos = [];
-    const tempFolder = './temp';
-    if (!fs.existsSync(tempFolder)) fs.mkdirSync(tempFolder);
 
-    const videoByKeyword = {};
-    const usedVideosIds = [];
-
-    let results = [];
-    let shouldUseResults = true;
-    if (fs.existsSync('./cache/results.json') && shouldUseResults) {
-        const cachedResults = JSON.parse(fs.readFileSync('./cache/results.json', 'utf8'));
-        results = cachedResults;
-    } else {
-        for (let index = 0; index < mainIdeas.length; index++) {
-            const mainIdea = mainIdeas[index];
-            console.log('-> Working on main idea: ', mainIdea.text, '(', index + 1, 'of', mainIdeas.length, ')')
-            const result = await chooseVideoFromYoutube(mainIdea, usedVideosIds);
-            results.push(result);
-        }
-        fs.writeFileSync('./cache/results.json', JSON.stringify(results, null, 2));
-    }
-
-    const newMainIdeas = [];
-    for (let i = 0; i < mainIdeas.length; i++) {
-        const mainIdea = mainIdeas[i];
-        const result = results[i];
-        const nextMainIdea = mainIdeas[i + 1];
-        const newStartTime = i === 0 ? '00:00:00,000' : mainIdea.start_time;
-        // Alargar hasta el start de la siguiente idea para abarcar silencios del audio
-        const segmentEndTime = nextMainIdea ? nextMainIdea.start_time : mainIdea.end_time;
-        const videoDuration = timeToSeconds(segmentEndTime) - timeToSeconds(newStartTime);
-
-        const videoPath = `./temp/youtube/${result.videoId}.mp4`;
-        let actualVideoDuration = null;
-        if (fs.existsSync(videoPath)) {
-            actualVideoDuration = await getVideoDuration(videoPath);
-        }
-        const { start_time: videoStart_time, end_time: videoEnd_time } = getStartAndEndTimeFromVideoId(result.videoId, videoDuration, actualVideoDuration);
-        const key = `${mainIdea.text}-${newStartTime}-${segmentEndTime}`;
-        console.log('------> Key: ', key);
-        const newMainIdea = {
-            ...mainIdea,
-            start_time: newStartTime,
-            end_time: segmentEndTime,
-            video_id: result.videoId,
-            video_start_time: videoStart_time,
-            video_end_time: videoEnd_time,
-            duration: videoDuration
-        }
-        newMainIdeas.push(newMainIdea);
-
-        const raw = results[i];
-        const videoId = typeof raw === "string" ? raw : raw?.videoId ?? null;
-        if (videoId) {
-            videoByKeyword[key] = videoId;
-        }
-    }
-    console.log("Full duration of new main ideas: ", newMainIdeas.reduce((acc, mainIdea) => acc + mainIdea.duration, 0));
-    // Werite main ideas in results.json
-    fs.writeFileSync('./cache/results.json', JSON.stringify(results, null, 2));
-    console.log('------> New main ideas: ', newMainIdeas);
-    fs.writeFileSync('./cache/newMainIdeas.json', JSON.stringify(newMainIdeas, null, 2));
-
-    try {
-        for (let i = 0; i < newMainIdeas.length; i++) {
-            const mainIdea = newMainIdeas[i];
-            const videoPath = `./temp/youtube/${mainIdea.video_id}.mp4`;
-
-            // Alargar hasta la siguiente idea: de start_time hasta el start_time de la siguiente (o hasta end_time si es la última)
-            const startSec = mainIdea.video_start_time;
-            const endSec = mainIdea.video_end_time;
-            const segmentDuration = endSec - startSec;
-            videos.push({
-                video_id: mainIdea.video_id,
-                video_path: videoPath,
-                final_duration: segmentDuration,
-                start_time: mainIdea.video_start_time,
-                text: mainIdea.text
-            });
-        }
-        const shouldDownloadVideos = false;
-        console.log("Video IDs")
-        console.log(videos.map(video => video.video_id));
-        console.log("--------------------------------");
-        if (shouldDownloadVideos) {
-            const promises = videos.map(video => downloadFinalVideo(video.video_id));
-            await Promise.all(promises);
-        }
-        return videos;
-    } catch (error) {
-        // fs.readdirSync(tempFolder).forEach(file => fs.unlinkSync(`${tempFolder}/${file}`));
-        throw error;
-    }
-}
 
 /**
  * Saves processed main ideas to a JSON file.
@@ -123,7 +19,7 @@ export const getVideos = async (mainIdeasOriginal) => {
  * @param {Object} processedMainIdeas - The processed main ideas to save.
  * @returns {Promise<void>} A promise that resolves when the main ideas have been saved.
  */
-const saveProcessedMainIdeas = async (mainIdea, processedMainIdeas) => {
+const saveProcessedMainIdeas = async (mainIdea: string, processedMainIdeas: any) => {
     const cacheDir = 'cache';
     const cachePath = `${cacheDir}/main_ideas_processed.json`;
     const objectToSave = {
@@ -144,8 +40,8 @@ const saveProcessedMainIdeas = async (mainIdea, processedMainIdeas) => {
  * @param {boolean} tooHard - Whether the main idea is too hard to process.
  * @returns {Promise<Object<{search_queries: string, visual_prompts: string}>>} The processed main ideas.
  */
-const workMainIdeas = async (mainIdeaText, tooHard = false, mainIdeaOriginalText) => {
-    const processedMainIdeas = await getProcessedMainIdea(mainIdeaText, tooHard, [], mainIdeaOriginalText);
+const workMainIdeas = async (mainIdeaText: string, tooHard = false, mainIdeaOriginalText: string, typeOfVideo = "curiosity") => {
+    const processedMainIdeas = await getProcessedMainIdea(mainIdeaText, tooHard, [], mainIdeaOriginalText, typeOfVideo);
     await saveProcessedMainIdeas(mainIdeaText, processedMainIdeas);
     return processedMainIdeas;
 }
@@ -157,12 +53,12 @@ const workMainIdeas = async (mainIdeaText, tooHard = false, mainIdeaOriginalText
  * @param {string[]} usedVideosIds - The IDs of the videos that have already been used.
  * @returns {Promise<{videoId: string, tooHard: boolean}>} The ID of the vertical video found.
  */
-export const chooseVideoFromYoutube = async (mainIdea, usedVideosIds = []) => {
+const chooseVideoFromYoutube = async (mainIdea: any, usedVideosIds: string[] = [], typeOfVideo = "curiosity") => {
     let tooHard = false;
     const mainIdeaText = mainIdea.text;
     const mainIdeaOriginalText = mainIdea.original_text;
     do {
-        const processedMainIdeas = await workMainIdeas(mainIdeaText, tooHard, mainIdeaOriginalText);
+        const processedMainIdeas = await workMainIdeas(mainIdeaText, tooHard, mainIdeaOriginalText, typeOfVideo);
         const { search_queries, visual_prompts } = processedMainIdeas;
         for (let processedMainIdea of search_queries) {
             console.log('--> Checking videos for processed idea: ', processedMainIdea)
@@ -187,9 +83,12 @@ export const chooseVideoFromYoutube = async (mainIdea, usedVideosIds = []) => {
  * @param {boolean} tooHard - Whether the main idea is too hard to process.
  * @returns {Promise<{videoId: string, tooHard: boolean}>} The ID of the vertical video found.
  */
-const checkVideosForMainIdea = async (processedMainIdea, visual_prompts, tooHard = false) => {
+const checkVideosForMainIdea = async (processedMainIdea: string, visual_prompts: string[], tooHard = false) => {
     const fullTerm = `${processedMainIdea}`;
-    const results = await searchVideosInYoutube(fullTerm, null, 5);
+    const searchVideosStartTime = new Date().getTime();
+    const results = await searchVideosInYoutube(fullTerm, null, 50, tooHard);
+    const searchVideosEndTime = new Date().getTime();
+    console.log('------> Search videos time: ', (searchVideosEndTime - searchVideosStartTime) / 1000, ' seconds');
     if (results.length === 0) {
         tooHard = true;
         console.log('---> No video found for term: ', processedMainIdea);
@@ -216,19 +115,26 @@ const checkVideosForMainIdea = async (processedMainIdea, visual_prompts, tooHard
  * @param {string[]} usedVideosIds - The IDs of the videos that have already been used.
  * @returns {Promise<{videoId: string, tooHard: boolean}>} The ID of the vertical video found.
  */
-const checkResultItemForMainIdea = async (mainIdea, visual_prompts, item, index = 0) => {
+const checkResultItemForMainIdea = async (mainIdea: string, visual_prompts: string[], item: any, index = 0) => {
     const videoId = item.id;
     try {
         console.log('-----> Checking result item for term: ', mainIdea, ' - ', videoId, ' - ', index);
         const cacheDir = 'cache/videoInfo';
         const cachePath = `${cacheDir}/${videoId}.json`;
-        // if (fs.existsSync(cachePath)) {
-        //     return {};
-        // }
-
-        if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+        if (fs.existsSync(cachePath)) {
+            return {};
+        } else {
+            if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+        }
         fs.writeFileSync(cachePath, JSON.stringify(item, null, 2));
 
+        const thumbnailStartTime = new Date().getTime();
+        const frameInGoodCondition = await isThumbnailAcceptable(item, visual_prompts);
+        const thumbnailEndTime = new Date().getTime();
+        console.log('------> Thumbnail analysis time: ', (thumbnailEndTime - thumbnailStartTime) / 1000, ' seconds');
+        if (!frameInGoodCondition) {
+            return null;
+        }
         // Check if there is frames and fram info of video id
         const infoOfFrames = await framesAndFrameInfoExists(videoId);
         if (infoOfFrames) {
@@ -236,7 +142,10 @@ const checkResultItemForMainIdea = async (mainIdea, visual_prompts, item, index 
         }
         // Download video and process frames
         console.log('------> Downloading video...');
+        const downloadStartTime = new Date().getTime();
         const videoPath = await downloadVideo(videoId);
+        const downloadEndTime = new Date().getTime();
+        console.log('------> Video download time: ', (downloadEndTime - downloadStartTime) / 1000, ' seconds');
         console.log('------> Video downloaded: ', videoPath);
 
         // Select frames query for the video
@@ -244,14 +153,20 @@ const checkResultItemForMainIdea = async (mainIdea, visual_prompts, item, index 
         const selectQuery = await selectFramesQueryForAVideo(videoPath);
 
         console.log('------> Select query: ', selectQuery);
+        const extractFramesStartTime = new Date().getTime();
         await extractFramesToDisk(videoPath, videoId, selectQuery);
+        const extractFramesEndTime = new Date().getTime();
+        console.log('------> Frames extraction time: ', (extractFramesEndTime - extractFramesStartTime) / 1000, ' seconds');
         console.log('------> Starting to process frames (from disk)...');
+        const processFramesStartTime = new Date().getTime();
         const scores = await processStreamingFrames(visual_prompts, videoId);
+        const processFramesEndTime = new Date().getTime();
+        console.log('------> Frames processing time: ', (processFramesEndTime - processFramesStartTime) / 1000, ' seconds');
 
         console.log('------> Scores: ', scores);
         const sortingScores = scores.sort((a, b) => b[1] - a[1]);
         const bestScore = sortingScores?.[0];
-        if (bestScore?.[1] >= parseFloat(process.env.THRESHOLD_SIMILARITY)) {
+        if (bestScore?.[1] >= parseFloat(process.env.THRESHOLD_SIMILARITY ?? '0') && bestScore[0] != null) {
             await writeVideoIdWithFrame(videoId, bestScore[0]);
             return { videoId };
         } else {
@@ -270,7 +185,7 @@ const checkResultItemForMainIdea = async (mainIdea, visual_prompts, item, index 
  * @param {string} videoId - The ID of the video to download and extract frames from.
  * @returns {Promise<void>} A promise that resolves when the frames have been extracted.
  */
-const downloadVideo = async (videoId) => {
+const downloadVideo = async (videoId: string) => {
     const tempFolder = './temp/youtube';
     if (!fs.existsSync(tempFolder)) fs.mkdirSync(tempFolder);
     const videoPath = await downloadYoutubeVideo({
@@ -291,7 +206,7 @@ const downloadVideo = async (videoId) => {
  * @param {string} frameName - The name of the frame to write.
  * @returns {Promise<void>} A promise that resolves when the video ID with frame name has been written.
  */
-const writeVideoIdWithFrame = async (videoId, frameName) => {
+const writeVideoIdWithFrame = async (videoId: string, frameName: string) => {
     const framePath = `./frames/${videoId}/${frameName}`;
     const jsonPath = `./cache/frame_info.json`;
     if (fs.existsSync(jsonPath)) {
@@ -306,10 +221,9 @@ const writeVideoIdWithFrame = async (videoId, frameName) => {
 /**
  * Extracts frames from a video.
  * @param {string} videoPath - The path to the video to extract frames from.
- * @param {string} videoId - The ID of the video to extract frames from.
  * @returns {Promise<void>} A promise that resolves when the frames have been extracted.
  */
-const selectFramesQueryForAVideo = async (videoPath) => {
+const selectFramesQueryForAVideo = async (videoPath: string) => {
 
     const videoDuration = await getVideoDuration(videoPath);
     const minutes = videoDuration / 60;
@@ -335,7 +249,7 @@ const selectFramesQueryForAVideo = async (videoPath) => {
  * @param {string} selectQuery - ffmpeg filter e.g. "fps=1/15"
  * @returns {Promise<string>} Frames folder path
  */
-const extractFramesToDisk = async (videoPath, videoId, selectQuery) => {
+const extractFramesToDisk = async (videoPath: string, videoId: string, selectQuery: string) => {
     const framesFolder = `./frames/${videoId}`;
     if (!fs.existsSync("./frames")) fs.mkdirSync("./frames", { recursive: true });
     if (!fs.existsSync(framesFolder)) fs.mkdirSync(framesFolder, { recursive: true });
@@ -345,7 +259,7 @@ const extractFramesToDisk = async (videoPath, videoId, selectQuery) => {
         return framesFolder;
     }
     const outputPattern = `${framesFolder}/frame_%04d.jpg`;
-    await new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
         ffmpeg(videoPath)
             .inputOptions(["-nostdin"])
             .videoFilters([selectQuery, "scale=224:224"])
@@ -364,7 +278,7 @@ const extractFramesToDisk = async (videoPath, videoId, selectQuery) => {
  * @param {string} videoId - The ID of the video to remove.
  * @returns {Promise<void>} A promise that resolves when the video and its frames have been removed.
  */
-const removeVideoAndFrames = async (videoId) => {
+const removeVideoAndFrames = async (videoId: string) => {
     const tempFolder = `./temp/youtube/${videoId}.mp4`;
     const framesFolder = `./frames/${videoId}`;
     if (fs.existsSync(tempFolder)) fs.unlinkSync(tempFolder);
@@ -376,7 +290,7 @@ const removeVideoAndFrames = async (videoId) => {
  * @param {string} videoId - The ID of the video to check.
  * @returns {Promise<boolean>} A promise that resolves to true if frames and frame info exist, false otherwise.
  */
-const framesAndFrameInfoExists = async (videoId) => {
+const framesAndFrameInfoExists = async (videoId: string) => {
     const frameInfoPath = `./cache/frame_info.json`;
     if (!fs.existsSync(frameInfoPath)) {
         return false;
@@ -393,7 +307,7 @@ const framesAndFrameInfoExists = async (videoId) => {
  * @param {string} videoId - The ID of the video to download.
  * @returns {Promise<void>} A promise that resolves when the video has been downloaded.
  */
-const downloadFinalVideo = async (videoId) => {
+const downloadFinalVideo = async (videoId: string) => {
     const tempFolder = './temp/youtube';
     if (!fs.existsSync(tempFolder)) fs.mkdirSync(tempFolder);
     if (fs.existsSync(tempFolder)) {
@@ -409,12 +323,27 @@ const downloadFinalVideo = async (videoId) => {
     });
 }
 
-export const getVideoDuration = async (videoPath) => {
-    const duration = await new Promise((resolve, reject) => {
-        ffmpeg.ffprobe(videoPath, (err, metadata) => {
+const getVideoDuration = async (videoPath: string): Promise<number> => {
+    const duration = await new Promise<number>((resolve, reject) => {
+        ffmpeg.ffprobe(videoPath, (err: Error | null, metadata: any) => {
             if (err) reject(err);
             resolve(metadata.format.duration);
         });
     });
     return duration;
+}
+
+
+export {
+    workMainIdeas,
+    chooseVideoFromYoutube,
+    checkVideosForMainIdea,
+    checkResultItemForMainIdea,
+    downloadVideo,
+    selectFramesQueryForAVideo,
+    extractFramesToDisk,
+    removeVideoAndFrames,
+    framesAndFrameInfoExists,
+    downloadFinalVideo,
+    getVideoDuration
 }

@@ -3,20 +3,36 @@ import fs from 'fs';
 
 const MAX_VIDEOS = 1;
 
-/**
- * Search for videos in YouTube.
- * @param {string} searchWord - The word to search for.
- * @returns {Promise<{id: string, title: string, description: string, thumbnail: string, duration: number, viewCount: number, likeCount: number, commentCount: number, channelId: string, channelTitle: string, channelUrl: string, channelThumbnail: string, channelSubscriberCount: number, channelVideoCount: number, channelViewCount: number}[]>} The videos found.
- */
-export const searchVideosInYoutube = async (searchWord, minDuration = null, maxResults) => {
+export interface YoutubeEntry {
+    id: string;
+    title?: string;
+    description?: string;
+    thumbnail?: string;
+    duration?: number;
+    view_count?: number;
+    like_count?: number;
+    comment_count?: number;
+    channel_id?: string;
+    channel?: string;
+    [key: string]: any;
+}
+
+export const searchVideosInYoutube = async (searchWord: string, minDuration: number | null = null, maxResults?: number, force: boolean = false): Promise<YoutubeEntry[]> => {
     if (await hasBannedTerm(searchWord)) {
         return [];
     }
+    if (fs.existsSync('./cache/youtube.json') && !force) {
+        const cachedData = JSON.parse(fs.readFileSync('./cache/youtube.json', 'utf8'));
+        if (cachedData[searchWord]) {
+            return cachedData[searchWord].entries;
+        }
+    }
     let matchFilter = '';
+    const commonFilter = '!is_live & !is_unplayable & live_status != "is_live"';
     if (minDuration) {
-        matchFilter = `duration > ${minDuration} & !is_live & !is_unplayable`;
+        matchFilter = `${commonFilter} & duration > ${minDuration} & duration < 600`;
     } else {
-        matchFilter = 'duration < 240 & !is_live & !is_unplayable';
+        matchFilter = `${commonFilter} & duration > 0 & duration < 240`;
     }
     try {
         const results = await youtubedl(
@@ -26,14 +42,18 @@ export const searchVideosInYoutube = async (searchWord, minDuration = null, maxR
                 noDownload: true,
                 matchFilter: matchFilter,
                 extractorArgs: "youtube:player_client=android,web",
-                flatPlaylist: true,
                 ignoreErrors: true,
                 jsRuntimes: "node",
                 cookiesFromBrowser: "firefox"
-            }
+            } as any
         );
-        const { entries = [] } = results ?? {};
+        const { entries = [] } = (results as any) ?? {};
         if (entries.length === 0) await addBannedTerm(searchWord);
+        fs.writeFileSync('./cache/youtube.json', JSON.stringify({
+            [searchWord]: {
+                entries: entries.slice(0, maxResults ?? MAX_VIDEOS)
+            }
+        }, null, 2));
         return entries.slice(0, maxResults ?? MAX_VIDEOS);
     } catch (error) {
         throw new Error(`Failed to search for videos: ${error}`);
@@ -41,7 +61,7 @@ export const searchVideosInYoutube = async (searchWord, minDuration = null, maxR
 }
 
 
-const addBannedTerm = async (term) => {
+const addBannedTerm = async (term: string): Promise<void> => {
     if (fs.existsSync('./cache/banned_terms.json')) {
         const bannedTerms = JSON.parse(fs.readFileSync('./cache/banned_terms.json', 'utf8'));
         bannedTerms.push(term);
@@ -49,7 +69,7 @@ const addBannedTerm = async (term) => {
     }
 }
 
-const hasBannedTerm = async (term) => {
+const hasBannedTerm = async (term: string): Promise<boolean> => {
     if (fs.existsSync('./cache/banned_terms.json')) {
         const bannedTerms = JSON.parse(fs.readFileSync('./cache/banned_terms.json', 'utf8'));
         return bannedTerms.includes(term);
