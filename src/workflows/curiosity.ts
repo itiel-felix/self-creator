@@ -1,6 +1,6 @@
 import fs from 'fs';
 import { timeToSeconds, getStartAndEndTimeFromVideoId } from "../utils.js";
-import { getVideoDuration, chooseVideoFromYoutube } from "../video/videoUtils.js";
+import { getMediaDuration, chooseVideoFromYoutube } from "../video/videoUtils.js";
 
 export interface MainIdeaSegment {
     start_time: string;
@@ -72,9 +72,9 @@ export const getCuriosityVideos = async (mainIdeasOriginal: any, typeOfVideo: st
         const videoPath = `./temp/youtube/${res.videoId}.mp4`;
         let actualVideoDuration: number | null = null;
         if (fs.existsSync(videoPath)) {
-            actualVideoDuration = await getVideoDuration(videoPath);
+            actualVideoDuration = await getMediaDuration(videoPath);
         }
-        const { start_time: videoStart_time, end_time: videoEnd_time } = getStartAndEndTimeFromVideoId(res.videoId, videoDuration, actualVideoDuration);
+        const { start_time: videoStart_time, end_time: videoEnd_time } = await getStartAndEndTimeFromVideoId(res.videoId, videoDuration, actualVideoDuration);
         const key = `${mainIdea.text}-${newStartTime}-${segmentEndTime}`;
         console.log('------> Key: ', key);
         const newMainIdea: NewMainIdea = {

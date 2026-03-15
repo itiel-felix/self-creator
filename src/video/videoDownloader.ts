@@ -23,6 +23,7 @@ export interface DownloadYoutubeOptions {
     extraOptions?: Record<string, any>;
     customName?: string | null;
     minDuration?: number | null;
+    sectionToDownload?: { start_time: string; end_time: string } | null;
 }
 
 export const downloadYoutubeVideo = async ({
@@ -31,7 +32,8 @@ export const downloadYoutubeVideo = async ({
     shouldReturnJSON = false,
     extraOptions = {},
     customName = null,
-    minDuration = null
+    minDuration = null,
+    sectionToDownload = null
 }: DownloadYoutubeOptions): Promise<string | any> => {
 
     const videoUrl = getYoutubeVideoUrl(videoId);
@@ -41,28 +43,34 @@ export const downloadYoutubeVideo = async ({
         return filePath;
     }
     const baseOpt: Record<string, any> = {
-        jsRuntimes: "node",
         noCheckCertificates: true,
         noWarnings: true,
-        cookiesFromBrowser: "firefox"
+        cookiesFromBrowser: "firefox",
+        // Evita el cliente "android" que no soporta cookies y suele dar "page needs to be reloaded"
+        extractorArgs: "youtube:player_client=web,player_skip=webpage",
     };
     if (minDuration) {
         const end = new Date(minDuration * 1000).toISOString().substring(11, 19);
         extraOptions.downloadSections = `*00:00:00-${end}`;
     }
-
+    if (sectionToDownload) {
+        extraOptions.downloadSections = `*${sectionToDownload.start_time}-${sectionToDownload.end_time}`;
+    }
     if (shouldReturnJSON) {
         const youtubeDlOptions = { dumpSingleJson: true, ...baseOpt, ...extraOptions };
         const json = await youtubedl(videoUrl, youtubeDlOptions);
         return json;
     }
-    await youtubedl(videoUrl, {
+
+    const finalOptions = {
         output: filePath,
         format: "bv*[ext=mp4][height<=1080]",
         mergeOutputFormat: "mp4",
         externalDownloader: "aria2c",
         ...baseOpt,
         ...extraOptions
-    });
+    };
+    console.log('------> Final options: ', finalOptions);
+    await youtubedl(videoUrl, finalOptions);
     return filePath;
 }

@@ -3,7 +3,7 @@
     "module": "ESNext",
     "moduleResolution": "Node",
     "target": "ES2022",
-    "outDir": "dist",
+    "noEmit": true,
     "rootDir": ".",
     "strict": true,
     "noImplicitAny": false,

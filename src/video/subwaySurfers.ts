@@ -8,7 +8,7 @@ const subwaySurfers = async (minDuration: number = 300): Promise<string | undefi
     }
     let videoAlreadyDownloaded = true;
     do {
-        const youtubeVideo = await searchVideosInYoutube("subway surfers coinless run gameplay", minDuration, 10);
+        const youtubeVideo = await searchVideosInYoutube("subway surfers gameplay", minDuration, 10);
 
         for (const video of youtubeVideo) {
             if (fs.existsSync(`./temp/brainrot/${video.id}.mp4`)) {
@@ -21,7 +21,7 @@ const subwaySurfers = async (minDuration: number = 300): Promise<string | undefi
                         outputFolder: './temp/brainrot',
                         minDuration: minDuration,
                         extraOptions: {
-                            format: "bestvideo[height<=1080]",
+                            format: "bv*[ext=mp4][height<=1080]",
                         }
                     });
                     return videoPath as string;

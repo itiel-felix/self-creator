@@ -6,7 +6,7 @@ import { transcribeAudioWhisperX } from "./src/services/replicate.service.js";
 import { getMainIdea } from "./src/services/deepSeek.service.js";
 import { cutAndConcatSegments, addBurnedInASSSubtitles, mergeSegmentsToVerticalScreen } from "./src/video/videoManage.js";
 import { generateASS, generateSRT } from "./src/subtitles/subtitle.service.js";
-import { getVideoDuration } from "./src/video/videoUtils.js";
+import { getMediaDuration } from "./src/video/videoUtils.js";
 import subwaySurfers from "./src/video/subwaySurfers.js";
 import { cropVideoToDuration } from "./src/video/videoManage.js";
 import { initializeCache } from "./src/utils.js";
@@ -63,7 +63,8 @@ import { getVideoGameVideos } from "./src/workflows/videogame/index.js";
                 videos = await getCuriosityVideos(mainIdeas, typeOfVideo);
                 break;
             case 'videogame':
-                videos = await getVideoGameVideos(mainIdeas, typeOfVideo);
+                const videoDuration = await getMediaDuration(audioPath);
+                videos = await getVideoGameVideos(mainIdeas[0].text, typeOfVideo, videoDuration);
                 break;
             default:
                 throw new Error('Invalid type of video');
@@ -73,7 +74,7 @@ import { getVideoGameVideos } from "./src/workflows/videogame/index.js";
         const mergedPath = './output/merged_video.mp4';
         console.log('------> Merging upper videos...');
         const mergedVideoPath = await cutAndConcatSegments(videos, mergedPath);
-        const mergedVideoLenght: number = await getVideoDuration(mergedPath);
+        const mergedVideoLenght: number = await getMediaDuration(mergedPath);
         console.log('------> Merged video length: ', mergedVideoLenght);
         // Part 6: Download subway surfers video
         console.log('------> Downloading subway surfers video...');

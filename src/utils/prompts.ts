@@ -410,10 +410,9 @@ export const searchQueriesSystemPrompt = (banned_terms: string[] = []): string =
     You will receive a videogame name. You will generate a search query and visual prompts for CLIP video matching.
     
     /////// RULES ///////
-    The search queries must be related to the videogame name and must be generic enough to find videos on YouTube.
+    The search queries must HAVE TO contain the videogame name and must be generic enough to find videos on YouTube.
     The search queries must be in English.
     The search queries must be unique.
-    The search queries must be related to the videogame name.
     ${banned_terms.length > 0 ? `Avoid these terms: ${banned_terms.join(', ')}, we already used them in the past.` : ''}
 
     INPUT
@@ -429,7 +428,6 @@ export const searchQueriesSystemPrompt = (banned_terms: string[] = []): string =
     OUTPUT:
     {
       "search_queries": [
-        "Street Fighter",
         "Street Fighter gameplay",
         "Street Fighter combos",
         "Street Fighter 6",

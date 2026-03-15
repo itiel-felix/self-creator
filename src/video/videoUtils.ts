@@ -225,7 +225,7 @@ const writeVideoIdWithFrame = async (videoId: string, frameName: string) => {
  */
 const selectFramesQueryForAVideo = async (videoPath: string) => {
 
-    const videoDuration = await getVideoDuration(videoPath);
+    const videoDuration = await getMediaDuration(videoPath);
     const minutes = videoDuration / 60;
     console.log("Video duration: ", minutes);
 
@@ -253,6 +253,7 @@ const extractFramesToDisk = async (videoPath: string, videoId: string, selectQue
     const framesFolder = `./frames/${videoId}`;
     if (!fs.existsSync("./frames")) fs.mkdirSync("./frames", { recursive: true });
     if (!fs.existsSync(framesFolder)) fs.mkdirSync(framesFolder, { recursive: true });
+
     const existing = fs.readdirSync(framesFolder).filter((f) => f.endsWith(".jpg"));
     if (existing.length > 0) {
         console.log(`------> Frames already on disk (${existing.length}), skipping extraction`);
@@ -323,7 +324,7 @@ const downloadFinalVideo = async (videoId: string) => {
     });
 }
 
-const getVideoDuration = async (videoPath: string): Promise<number> => {
+const getMediaDuration = async (videoPath: string): Promise<number> => {
     const duration = await new Promise<number>((resolve, reject) => {
         ffmpeg.ffprobe(videoPath, (err: Error | null, metadata: any) => {
             if (err) reject(err);
@@ -345,5 +346,7 @@ export {
     removeVideoAndFrames,
     framesAndFrameInfoExists,
     downloadFinalVideo,
-    getVideoDuration
+    getMediaDuration,
+    writeVideoIdWithFrame
+
 }

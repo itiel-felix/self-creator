@@ -24,7 +24,11 @@ export const searchVideosInYoutube = async (searchWord: string, minDuration: num
     if (fs.existsSync('./cache/youtube.json') && !force) {
         const cachedData = JSON.parse(fs.readFileSync('./cache/youtube.json', 'utf8'));
         if (cachedData[searchWord]) {
-            return cachedData[searchWord].entries;
+            const entries = cachedData[searchWord].entries.filter(entry => !entry.hasBeenAnalyzed);
+            if (entries.length > 0) {
+                console.log('--> Found unused videos for search query: ', searchWord, ' - ', entries.length);
+                return entries;
+            }
         }
     }
     let matchFilter = '';
@@ -41,7 +45,7 @@ export const searchVideosInYoutube = async (searchWord: string, minDuration: num
                 dumpSingleJson: true,
                 noDownload: true,
                 matchFilter: matchFilter,
-                extractorArgs: "youtube:player_client=android,web",
+                extractorArgs: "youtube:player_client=web;player_skip=webpage",
                 ignoreErrors: true,
                 jsRuntimes: "node",
                 cookiesFromBrowser: "firefox"
