@@ -1,18 +1,17 @@
 import { runClipJob } from "./clipWorkerManager";
 
 /**
- * Runs CLIP on frames already on disk at ./frames/{videoId}/.
+ * Ejecuta CLIP sobre JPEG en memoria. Python recibe `frameImagesBase64` en ambos modos.
  */
 export default async function processStreamingFrames(
     visual_prompts: string | string[],
-    videoId: string,
-    type: string = "frames"
+    framesJpeg: Buffer[],
+    type: "frames" | "thumbnails" = "frames"
 ): Promise<any> {
-
     const job = {
         queries: visual_prompts,
-        videoId,
-        type
+        type,
+        frameImagesBase64: framesJpeg.map((b) => b.toString("base64")),
     };
     const result = await runClipJob(job);
     return result;

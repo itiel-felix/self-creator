@@ -7,6 +7,8 @@ import numpy as np
 import os
 import hashlib
 import time
+import base64
+from io import BytesIO
 
 CACHE_DIR = "cache/text_embeddings"
 
@@ -59,18 +61,24 @@ print("READY", flush=True)
 def run_job(job):
 
     queries = job["queries"]
-    video_id = job["videoId"]
     type = job.get("type", "frames")
+    frame_images_b64 = job.get("frameImagesBase64")
 
     if isinstance(queries, str):
         queries = [queries]
 
+    # frames y thumbnails: solo JPEG en memoria (Node manda frameImagesBase64). Sin carpetas en disco.
     if type == "frames":
-        frames_folder = os.path.join(".", "frames", video_id)
         threshold = float(os.getenv("THRESHOLD_SIMILARITY", 0.25))
-    else:
-        frames_folder = os.path.join(".", "temp", "thumbnails", video_id)
+    elif type == "thumbnails":
         threshold = float(os.getenv("THRESHOLD_SIMILARITY_THUMBNAIL", 0.35))
+    else:
+        raise ValueError(f"type desconocido: {type}")
+
+    if not frame_images_b64:
+        raise ValueError(
+            f"type={type} requiere frameImagesBase64 (imágenes JPEG en memoria desde Node)."
+        )
 
     # ----------------
     # TEXT EMBEDDINGS
@@ -118,9 +126,10 @@ def run_job(job):
 
     batch_size = int(os.getenv("CLIP_BATCH_SIZE", "32"))
 
-    frame_files = sorted(
-        f for f in os.listdir(frames_folder) if f.endswith(".jpg")
-    )
+    if type == "frames":
+        frame_files = [f"frame_{i+1:04d}.jpg" for i in range(len(frame_images_b64))]
+    else:
+        frame_files = [f"thumbnail_{i+1:04d}.jpg" for i in range(len(frame_images_b64))]
 
     results = []
 
@@ -130,9 +139,12 @@ def run_job(job):
 
         images = []
 
-        for f in batch_files:
+        for j, f in enumerate(batch_files):
 
-            with Image.open(os.path.join(frames_folder, f)) as img:
+            raw = base64.b64decode(frame_images_b64[start_idx + j])
+            img = Image.open(BytesIO(raw))
+
+            with img:
                 img = img.convert("RGB")
                 tensor = preprocess(img)
                 images.append(tensor)

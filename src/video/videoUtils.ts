@@ -8,6 +8,9 @@ import { searchVideosInYoutube } from "../services/video.service.js";
 
 import processStreamingFrames from "../embeddings/processFrames.js";
 import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import ffmpegStatic from "ffmpeg-static";
 import ffmpeg from "fluent-ffmpeg";
 import { isThumbnailAcceptable } from "./processThumbnails.js";
 
@@ -154,12 +157,12 @@ const checkResultItemForMainIdea = async (mainIdea: string, visual_prompts: stri
 
         console.log('------> Select query: ', selectQuery);
         const extractFramesStartTime = new Date().getTime();
-        await extractFramesToDisk(videoPath, videoId, selectQuery);
+        const frames = await extractFramesToDisk(videoPath, selectQuery.selectQuery);
         const extractFramesEndTime = new Date().getTime();
         console.log('------> Frames extraction time: ', (extractFramesEndTime - extractFramesStartTime) / 1000, ' seconds');
-        console.log('------> Starting to process frames (from disk)...');
+        console.log('------> Starting to process frames (in memory)...');
         const processFramesStartTime = new Date().getTime();
-        const scores = await processStreamingFrames(visual_prompts, videoId);
+        const scores = await processStreamingFrames(visual_prompts, frames, "frames");
         const processFramesEndTime = new Date().getTime();
         console.log('------> Frames processing time: ', (processFramesEndTime - processFramesStartTime) / 1000, ' seconds');
 
@@ -229,49 +232,80 @@ const selectFramesQueryForAVideo = async (videoPath: string) => {
     const minutes = videoDuration / 60;
     console.log("Video duration: ", minutes);
 
-    let selectQuery;
+    let secondsBetweenFrames: number;
 
     if (minutes > 3 && minutes < 5) {
-        selectQuery = "fps=1/15";
+        secondsBetweenFrames = 15;
     } else if (minutes > 1 && minutes < 3) {
-        selectQuery = "fps=1/5";
+        secondsBetweenFrames = 5;
     } else {
-        selectQuery = "fps=1";
+        secondsBetweenFrames = 1;
     }
-    return selectQuery;
+
+    const selectQuery = `fps=1/${secondsBetweenFrames}`;
+
+    return { selectQuery, secondsBetweenFrames };
+};
+
+/** Segundos máximos del vídeo a procesar para CLIP (0 = sin límite). */
+const frameExtractMaxSeconds = (): number => {
+    const raw = process.env.FRAME_EXTRACT_MAX_SECONDS;
+    if (raw === undefined || raw === "") return 120;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : 0;
 };
 
 /**
- * Extracts frames from a video to disk (./frames/{videoId}/frame_0001.jpg, ...).
- * Skips if folder already has frames. Allows resuming and re-running CLIP later.
- * @param {string} videoPath - Path to the video file
- * @param {string} videoId - YouTube video ID (used for folder name)
- * @param {string} selectQuery - ffmpeg filter e.g. "fps=1/15"
- * @returns {Promise<string>} Frames folder path
+ * Extrae frames del vídeo a un directorio temporal del OS, los lee como buffers y borra el directorio.
+ * Mismo resultado que antes (Buffer[]) pero usando la escritura a disco de ffmpeg, que es más rápida.
  */
-const extractFramesToDisk = async (videoPath: string, videoId: string, selectQuery: string) => {
-    const framesFolder = `./frames/${videoId}`;
-    if (!fs.existsSync("./frames")) fs.mkdirSync("./frames", { recursive: true });
-    if (!fs.existsSync(framesFolder)) fs.mkdirSync(framesFolder, { recursive: true });
+const extractFramesToDisk = async (videoPath: string, selectQuery: string): Promise<Buffer[]> => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "sc-frames-"));
+    const outputPattern = path.join(tmpDir, "frame_%04d.jpg");
+    const maxSec = frameExtractMaxSeconds();
+    const startMs = Date.now();
 
-    const existing = fs.readdirSync(framesFolder).filter((f) => f.endsWith(".jpg"));
-    if (existing.length > 0) {
-        console.log(`------> Frames already on disk (${existing.length}), skipping extraction`);
-        return framesFolder;
+    console.log(`------> Extrayendo frames a carpeta temporal: ${tmpDir} (máx ${maxSec}s)`);
+
+    try {
+        await new Promise<void>((resolve, reject) => {
+            const cmd = ffmpeg(videoPath)
+                .inputOptions(["-nostdin"])
+                .videoFilters([selectQuery, "scale=224:224:flags=fast_bilinear"])
+                .outputOptions(["-vsync", "vfr"]);
+
+            if (maxSec > 0) cmd.duration(maxSec);
+
+            let lastCount = 0;
+            const progressInterval = setInterval(() => {
+                const written = fs.readdirSync(tmpDir).filter(f => f.endsWith(".jpg")).length;
+                if (written !== lastCount) {
+                    lastCount = written;
+                    const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
+                    process.stdout.write(`\r------> ffmpeg: ${written} frames | ${elapsed}s`);
+                }
+            }, 1000);
+
+            cmd.output(outputPattern)
+                .on("end", () => {
+                    clearInterval(progressInterval);
+                    process.stdout.write("\n");
+                    resolve();
+                })
+                .on("error", (err) => {
+                    clearInterval(progressInterval);
+                    reject(err);
+                })
+                .run();
+        });
+
+        const files = fs.readdirSync(tmpDir).filter(f => f.endsWith(".jpg")).sort();
+        const buffers = files.map(f => fs.readFileSync(path.join(tmpDir, f)));
+        console.log(`------> Frames en memoria: ${buffers.length} JPEG (${((Date.now() - startMs) / 1000).toFixed(1)}s)`);
+        return buffers;
+    } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-    const outputPattern = `${framesFolder}/frame_%04d.jpg`;
-    await new Promise<void>((resolve, reject) => {
-        ffmpeg(videoPath)
-            .inputOptions(["-nostdin"])
-            .videoFilters([selectQuery, "scale=224:224"])
-            .outputOptions(["-vsync", "vfr"])
-            .output(outputPattern)
-            .on("end", () => resolve())
-            .on("error", (err) => reject(err))
-            .run();
-    });
-    console.log(`------> Frames extracted to ${framesFolder}`);
-    return framesFolder;
 };
 
 /**

@@ -9,7 +9,7 @@ output/
 
 # Transcription cache
 cache/
-
+logs/
 # Temp files
 temp/
 .DS_Store

@@ -6,6 +6,22 @@ import { runYtDlp } from "../utils/ytDlpRunner.js";
 
 const generateVideoId = (): string => Math.random().toString(36).substring(2, 15);
 
+export interface HeatmapSegment {
+    start_time: number;
+    end_time: number;
+    value: number; // 0–1, where 1 is the most replayed segment
+}
+
+/**
+ * Returns the start_time (in seconds) of the most-watched segment from an already-fetched heatmap array.
+ * Returns null if the array is empty or falsy.
+ */
+export const getMostWatchedSecond = (heatmaps: HeatmapSegment[] | null | undefined): number | null => {
+    if (!heatmaps || heatmaps.length === 0) return null;
+    const best = heatmaps.reduce((prev, curr) => curr.value > prev.value ? curr : prev);
+    return best.start_time;
+};
+
 export const downloadVideo = async (url: string, outputFolder: string): Promise<string> => {
     const response = await fetch(url);
     if (!response.ok) throw new Error(`Failed to download: ${response.statusText}`);

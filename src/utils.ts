@@ -47,9 +47,15 @@ const getStartAndEndTimeFromVideoId = (videoId: string, clipDuration: number, ac
     const frameInfo = (JSON.parse(fs.readFileSync(jsonPath, 'utf8')) as Record<string, string>)[videoId];
     const splittedBySlash = frameInfo?.split('/');
     const frameName = splittedBySlash?.[splittedBySlash.length - 1]?.split('.')[0];
-    const frameIndex = Number(frameName?.split('_')[1] ?? 0);
 
-    const goldenSecond = frameIndexToSeconds(frameIndex, actualVideoDuration ?? 0);
+    // frame_heatmap_NNNN → goldenSecond viene directamente del heatmap (en segundos)
+    let goldenSecond: number;
+    if (frameName?.startsWith('frame_heatmap_')) {
+        goldenSecond = Number(frameName.replace('frame_heatmap_', ''));
+    } else {
+        const frameIndex = Number(frameName?.split('_')[1] ?? 0);
+        goldenSecond = frameIndexToSeconds(frameIndex, actualVideoDuration ?? 0);
+    }
 
     let startTime = goldenSecond - (clipDuration / 2.0);
     let endTime = startTime + clipDuration;
