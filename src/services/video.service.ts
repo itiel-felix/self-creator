@@ -1,5 +1,5 @@
-import youtubedl from "youtube-dl-exec";
 import fs from 'fs';
+import { runYtDlpJson } from "../utils/ytDlpRunner.js";
 
 const MAX_VIDEOS = 1;
 
@@ -17,6 +17,17 @@ export interface YoutubeEntry {
     [key: string]: any;
 }
 
+const sanitizeYoutubeEntries = (raw: unknown): YoutubeEntry[] => {
+    if (!Array.isArray(raw)) return [];
+    return raw
+        .filter((e): e is YoutubeEntry => {
+            if (!e || typeof e !== "object") return false;
+            const maybeAny = e as any;
+            return typeof maybeAny.id === "string" && maybeAny.id.length > 0;
+        })
+        .map((e) => e as YoutubeEntry);
+};
+
 export const searchVideosInYoutube = async (searchWord: string, minDuration: number | null = null, maxResults?: number, force: boolean = false): Promise<YoutubeEntry[]> => {
     if (await hasBannedTerm(searchWord)) {
         return [];
@@ -24,7 +35,8 @@ export const searchVideosInYoutube = async (searchWord: string, minDuration: num
     if (fs.existsSync('./cache/youtube.json') && !force) {
         const cachedData = JSON.parse(fs.readFileSync('./cache/youtube.json', 'utf8'));
         if (cachedData[searchWord]) {
-            const entries = cachedData[searchWord].entries.filter(entry => !entry.hasBeenAnalyzed);
+            const cachedEntries = sanitizeYoutubeEntries(cachedData[searchWord].entries);
+            const entries = cachedEntries.filter(entry => !entry.hasBeenAnalyzed);
             if (entries.length > 0) {
                 console.log('--> Found unused videos for search query: ', searchWord, ' - ', entries.length);
                 return entries;
@@ -39,21 +51,34 @@ export const searchVideosInYoutube = async (searchWord: string, minDuration: num
         matchFilter = `${commonFilter} & duration > 0 & duration < 240`;
     }
     try {
-        const results = await youtubedl(
-            `ytsearch${maxResults ?? '5'}:${searchWord}`,
-            {
-                dumpSingleJson: true,
-                noDownload: true,
-                matchFilter: matchFilter,
-                extractorArgs: "youtube:player_client=web;player_skip=webpage",
-                ignoreErrors: true,
-                jsRuntimes: "node",
-                cookiesFromBrowser: "firefox"
-            } as any
-        );
-        const { entries = [] } = (results as any) ?? {};
+        const query = `ytsearch${maxResults ?? '5'}:${searchWord}`;
+
+        const cookiesBrowser = process.env.YT_COOKIES_BROWSER ?? null;
+        const results = await runYtDlpJson([
+            "--no-check-certificate",
+            "--no-warnings",
+            "--no-playlist",
+            "--skip-download",
+            "--dump-single-json",
+            "--ignore-errors",
+            "--match-filter",
+            matchFilter,
+            // "--extractor-args",
+            // "youtube:player_client=web,player_skip=webpage",
+            // ...(cookiesBrowser ? ["--cookies-from-browser", cookiesBrowser] : []),
+            query,
+        ]);
+
+        const rawEntries = (results as any)?.entries;
+        const entries = sanitizeYoutubeEntries(rawEntries);
+
         if (entries.length === 0) await addBannedTerm(searchWord);
+        let cachedData = {}
+        if (fs.existsSync('./cache/youtube.json')) {
+            cachedData = JSON.parse(fs.readFileSync('./cache/youtube.json', 'utf8'));
+        }
         fs.writeFileSync('./cache/youtube.json', JSON.stringify({
+            ...cachedData,
             [searchWord]: {
                 entries: entries.slice(0, maxResults ?? MAX_VIDEOS)
             }

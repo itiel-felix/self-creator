@@ -34,7 +34,7 @@ export const getVideoGameVideos = async (videoGameName: string, _typeOfVideo?: s
             analyzedVideos = [...analyzedVideos, ...searchesVideos.map((video: any) => video.id ?? video.videoId)];
 
             for (const video of searchesVideos) {
-                if (randomTimes.length == numberOfVideos) {
+                if (randomTimes.length == selectedVideos.length) {
                     break;
                 }
                 video.hasBeenAnalyzed = true;
@@ -104,7 +104,7 @@ const processVideo = async (video: any, comparePrompts: string[]): Promise<strin
 const searchVideos = async ({ searchQuery, maxVideos, analyzedVideos }: { searchQuery: string; maxVideos: number; round: number; analyzedVideos: string[] }) => {
     let round = 1;
     let filteredVideos: YoutubeEntry[] = [];
-    while (filteredVideos.length == 0) {
+    while (filteredVideos.length == 0 && round < 3) {
         const videos = await searchVideosInYoutube(searchQuery, null, maxVideos * round);
         filteredVideos = videos.filter(video => !analyzedVideos.includes(video.id));
         round++;

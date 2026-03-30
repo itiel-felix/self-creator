@@ -1,11 +1,10 @@
 import { pipeline } from "stream/promises";
 import { Readable } from "stream";
 import { getYoutubeVideoUrl } from "../services/youtube.service.js";
-import youtubedl from "youtube-dl-exec";
 import fs from 'fs';
+import { runYtDlp } from "../utils/ytDlpRunner.js";
 
 const generateVideoId = (): string => Math.random().toString(36).substring(2, 15);
-
 
 export const downloadVideo = async (url: string, outputFolder: string): Promise<string> => {
     const response = await fetch(url);
@@ -42,35 +41,75 @@ export const downloadYoutubeVideo = async ({
         console.log('------> Video already downloaded: ', filePath);
         return filePath;
     }
-    const baseOpt: Record<string, any> = {
-        noCheckCertificates: true,
-        noWarnings: true,
-        cookiesFromBrowser: "firefox",
-        // Evita el cliente "android" que no soporta cookies y suele dar "page needs to be reloaded"
-        extractorArgs: "youtube:player_client=web,player_skip=webpage",
-    };
+
+    // Allow overriding the binary location (useful if you installed yt-dlp via a venv or brew).
+    const ytDlpPath = process.env.YT_DLP_PATH ?? "yt-dlp";
+
+    // Base flags to avoid the "page needs to be reloaded" path.
+    const baseArgs: string[] = [
+        "--no-check-certificate",
+        "--no-warnings",
+        "--no-playlist",
+        // Prefer the web player.
+        // "--extractor-args", "youtube:player_client=web,player_skip=webpage",
+        // Use browser cookies only if you explicitly set `YT_COOKIES_BROWSER`.
+        ...(process.env.YT_COOKIES_BROWSER ? ["--cookies-from-browser", process.env.YT_COOKIES_BROWSER] : []),
+    ];
+
+    // Translate existing options we support from the old youtube-dl-exec wrapper.
+    const format = typeof extraOptions.format === "string" ? extraOptions.format : "bv*[ext=mp4][height<=1080]";
+
+    let downloadSections: string | null = null;
     if (minDuration) {
         const end = new Date(minDuration * 1000).toISOString().substring(11, 19);
-        extraOptions.downloadSections = `*00:00:00-${end}`;
+        downloadSections = `*00:00:00-${end}`;
     }
     if (sectionToDownload) {
-        extraOptions.downloadSections = `*${sectionToDownload.start_time}-${sectionToDownload.end_time}`;
+        downloadSections = `*${sectionToDownload.start_time}-${sectionToDownload.end_time}`;
     }
-    if (shouldReturnJSON) {
-        const youtubeDlOptions = { dumpSingleJson: true, ...baseOpt, ...extraOptions };
-        const json = await youtubedl(videoUrl, youtubeDlOptions);
-        return json;
+    if (typeof extraOptions.downloadSections === "string") {
+        downloadSections = extraOptions.downloadSections;
     }
 
-    const finalOptions = {
-        output: filePath,
-        format: "bv*[ext=mp4][height<=1080]",
-        mergeOutputFormat: "mp4",
-        externalDownloader: "aria2c",
-        ...baseOpt,
-        ...extraOptions
-    };
-    console.log('------> Final options: ', finalOptions);
-    await youtubedl(videoUrl, finalOptions);
+    // aria2c solo si está definido; si no está instalado, yt-dlp falla y antes no veías el error.
+    const externalDownloaderArgs =
+        process.env.YT_EXTERNAL_DOWNLOADER?.trim()
+            ? ["--external-downloader", process.env.YT_EXTERNAL_DOWNLOADER.trim()]
+            : [];
+
+    if (shouldReturnJSON) {
+        const args: string[] = [
+            ...baseArgs,
+            "--dump-single-json",
+            "--skip-download",
+            ...externalDownloaderArgs,
+            videoUrl,
+        ];
+        const { stdout, stderr, exitCode } = await runYtDlp(args, { ytDlpPath });
+        if (exitCode !== 0) {
+            throw new Error(`yt-dlp failed (${exitCode}): ${stderr || stdout}`);
+        }
+        return JSON.parse(stdout);
+    }
+
+    const args: string[] = [
+        ...baseArgs,
+        ...externalDownloaderArgs,
+        "-f", format,
+        "--merge-output-format", "mp4",
+        "-o", filePath,
+        ...(downloadSections ? ["--download-sections", downloadSections] : []),
+        videoUrl,
+    ];
+
+    console.log("------> yt-dlp args:", JSON.stringify(args));
+    const { stderr, exitCode } = await runYtDlp(args, { ytDlpPath });
+    if (exitCode !== 0) {
+        console.error("------> yt-dlp stderr:\n", stderr);
+        throw new Error(`yt-dlp failed (${exitCode}). ${stderr.slice(0, 2000)}`);
+    }
+    if (!fs.existsSync(filePath)) {
+        throw new Error(`yt-dlp reported success but file missing: ${filePath}`);
+    }
     return filePath;
 }
