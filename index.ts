@@ -7,11 +7,13 @@ import { getMainIdea } from "./src/services/deepSeek.service.js";
 import { cutAndConcatSegments, addBurnedInASSSubtitles, mergeSegmentsToVerticalScreen } from "./src/video/videoManage.js";
 import { generateASS, generateSRT } from "./src/subtitles/subtitle.service.js";
 import { getMediaDuration } from "./src/video/videoUtils.js";
-import subwaySurfers from "./src/video/subwaySurfers.js";
 import { cropVideoToDuration } from "./src/video/videoManage.js";
 import { initializeCache } from "./src/utils.js";
 import { getCuriosityVideos } from "./src/workflows/curiosity.js";
 import { getVideoGameVideos } from "./src/workflows/videogame/index.js";
+import DownloadDopamineVideo from "./src/video/downloadDopamineVideo.js";
+
+
 (async () => {
     // int settings
     const start = Date.now();
@@ -72,22 +74,23 @@ import { getVideoGameVideos } from "./src/workflows/videogame/index.js";
 
         // Part 5: Merge videos with audio
         const mergedPath = './output/merged_video.mp4';
-        console.log('------> Merging upper videos...');
-        const mergedVideoPath = await cutAndConcatSegments(videos, mergedPath);
+        console.log('------> Merging Dopamine and upper videos...');
+        await cutAndConcatSegments(videos, mergedPath);
         const mergedVideoLenght: number = await getMediaDuration(mergedPath);
         console.log('------> Merged video length: ', mergedVideoLenght);
-        // Part 6: Download subway surfers video
-        console.log('------> Downloading subway surfers video...');
-        const subwaySurfersVideoPath = await subwaySurfers(mergedVideoLenght);
-        if (!subwaySurfersVideoPath) throw new Error('Failed to download subway surfers video');
-        console.log(`------> Subway surfers video download complete, cropping to length ${mergedVideoLenght} seconds...`);
-        await cropVideoToDuration(subwaySurfersVideoPath, mergedVideoLenght);
-        console.log('------> Subway surfers video ready: ', subwaySurfersVideoPath);
+
+        // Part 6: Download Dopamine video
+        console.log('------> Downloading Dopamine video...');
+        const DopamineVideoPath = await DownloadDopamineVideo(mergedVideoLenght * 2);
+        if (!DopamineVideoPath) throw new Error('Failed to download Dopamine video');
+        console.log(`------> Dopamine video download complete, cropping to length ${mergedVideoLenght} seconds...`);
+        await cropVideoToDuration(DopamineVideoPath, mergedVideoLenght, 2);
+        console.log('------> Dopamine video ready: ', DopamineVideoPath);
 
         // Last merge
         const newVideos: { video_path: string; final_duration: number; start_time: string; text: string }[] = [
             {
-                video_path: subwaySurfersVideoPath,
+                video_path: DopamineVideoPath,
                 final_duration: mergedVideoLenght,
                 start_time: '00:00:00,000',
                 text: 'Subway surfers coinless run'
@@ -100,7 +103,7 @@ import { getVideoGameVideos } from "./src/workflows/videogame/index.js";
             }
         ]
 
-        console.log('------> Merging subway surfers and upper videos...');
+        console.log('------> Merging Dopamine and upper videos...');
         let verticalMergedPath = './output/vertical_merged_video.mp4';
         let verticalMergedVideoPath = await mergeSegmentsToVerticalScreen(newVideos, verticalMergedPath, audioPath);
         console.log('------> Vertical merged video ready: ', verticalMergedVideoPath);

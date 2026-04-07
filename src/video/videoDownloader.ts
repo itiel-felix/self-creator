@@ -12,15 +12,6 @@ export interface HeatmapSegment {
     value: number; // 0–1, where 1 is the most replayed segment
 }
 
-/**
- * Returns the start_time (in seconds) of the most-watched segment from an already-fetched heatmap array.
- * Returns null if the array is empty or falsy.
- */
-export const getMostWatchedSecond = (heatmaps: HeatmapSegment[] | null | undefined): number | null => {
-    if (!heatmaps || heatmaps.length === 0) return null;
-    const best = heatmaps.reduce((prev, curr) => curr.value > prev.value ? curr : prev);
-    return best.start_time;
-};
 
 export const downloadVideo = async (url: string, outputFolder: string): Promise<string> => {
     const response = await fetch(url);
@@ -39,6 +30,7 @@ export interface DownloadYoutubeOptions {
     customName?: string | null;
     minDuration?: number | null;
     sectionToDownload?: { start_time: string; end_time: string } | null;
+    forceDownload?: boolean;
 }
 
 export const downloadYoutubeVideo = async ({
@@ -48,12 +40,13 @@ export const downloadYoutubeVideo = async ({
     extraOptions = {},
     customName = null,
     minDuration = null,
-    sectionToDownload = null
+    sectionToDownload = null,
+    forceDownload = false
 }: DownloadYoutubeOptions): Promise<string | any> => {
 
     const videoUrl = getYoutubeVideoUrl(videoId);
     const filePath = `${outputFolder}/${customName || videoId}.mp4`;
-    if (fs.existsSync(filePath)) {
+    if (fs.existsSync(filePath) && !forceDownload) {
         console.log('------> Video already downloaded: ', filePath);
         return filePath;
     }

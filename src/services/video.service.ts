@@ -28,7 +28,11 @@ const sanitizeYoutubeEntries = (raw: unknown): YoutubeEntry[] => {
         .map((e) => e as YoutubeEntry);
 };
 
-export const searchVideosInYoutube = async (searchWord: string, minDuration: number | null = null, maxResults?: number, force: boolean = false): Promise<YoutubeEntry[]> => {
+export const searchVideosInYoutube = async (
+    searchWord: string,
+    minDuration: number | null = null,
+    maxResults?: number,
+    force: boolean = false): Promise<YoutubeEntry[]> => {
     if (await hasBannedTerm(searchWord)) {
         return [];
     }
@@ -48,7 +52,7 @@ export const searchVideosInYoutube = async (searchWord: string, minDuration: num
     if (minDuration) {
         matchFilter = `${commonFilter} & duration > ${minDuration} & duration < 600`;
     } else {
-        matchFilter = `${commonFilter} & duration > 0 & duration < 240`;
+        matchFilter = `${commonFilter} & duration > 0`;
     }
     try {
         const query = `ytsearch${maxResults ?? '5'}:${searchWord}`;
@@ -72,7 +76,6 @@ export const searchVideosInYoutube = async (searchWord: string, minDuration: num
         const rawEntries = (results as any)?.entries;
         const entries = sanitizeYoutubeEntries(rawEntries);
 
-        if (entries.length === 0) await addBannedTerm(searchWord);
         let cachedData = {}
         if (fs.existsSync('./cache/youtube.json')) {
             cachedData = JSON.parse(fs.readFileSync('./cache/youtube.json', 'utf8'));
@@ -80,7 +83,7 @@ export const searchVideosInYoutube = async (searchWord: string, minDuration: num
         fs.writeFileSync('./cache/youtube.json', JSON.stringify({
             ...cachedData,
             [searchWord]: {
-                entries: entries.slice(0, maxResults ?? MAX_VIDEOS)
+                entries: [...cachedData[searchWord]?.entries ?? [], ...entries.slice(0, maxResults ?? MAX_VIDEOS)]
             }
         }, null, 2));
         return entries.slice(0, maxResults ?? MAX_VIDEOS);

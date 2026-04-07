@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { downloadYoutubeVideo } from "./videoDownloader.js";
+import { downloadYoutubeVideo, HeatmapSegment } from "./videoDownloader.js";
 import { getProcessedMainIdea } from "../services/deepSeek.service.js";
 import { getYoutubeVideoUrl } from "../services/youtube.service.js";
 import { searchVideosInYoutube } from "../services/video.service.js";
@@ -368,6 +368,24 @@ const getMediaDuration = async (videoPath: string): Promise<number> => {
     return duration;
 }
 
+/**
+ * Returns the start_time (in seconds) of the most-watched segment from an already-fetched heatmap array.
+ * Returns null if the array is empty or falsy.
+ */
+const getMostWatchedSecond = (heatmaps: HeatmapSegment[] | null | undefined): number | null => {
+    if (!heatmaps || heatmaps.length === 0) return null;
+    const best = heatmaps.reduce((prev, curr) => curr.value > prev.value ? curr : prev);
+    return best.start_time;
+};
+
+
+const secondsToHMS = (totalSeconds: number): string => {
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = Math.floor(totalSeconds % 60);
+    return [h, m, s].map(v => v.toString().padStart(2, "0")).join(":");
+}
+
 
 export {
     workMainIdeas,
@@ -381,6 +399,8 @@ export {
     framesAndFrameInfoExists,
     downloadFinalVideo,
     getMediaDuration,
-    writeVideoIdWithFrame
+    writeVideoIdWithFrame,
+    getMostWatchedSecond,
+    secondsToHMS
 
 }

@@ -64,7 +64,7 @@ export const generateASS = (words: WhisperWord[]): string => {
         const duration = (endTime - current.start) * 1000;
         const zoomDuration = Math.min(200, duration * 0.25);
 
-        const text = `{\\fad(50,50)\\fs110\\t(0,${zoomDuration},\\fs170)\\t(${zoomDuration},${zoomDuration * 2},\\fs110)\\c&H00FFFF&\\bord6\\shad0}${current.word.toUpperCase()}`;
+        const text = `{\\fad(50,50)\\fs160\\t(0,${zoomDuration},\\fs220)\\t(${zoomDuration},${zoomDuration * 2},\\fs160)\\c&H00FFFF&\\bord6\\shad0}${current.word.toUpperCase()}`;
         lines.push(`Dialogue: 0,${start},${end},Main,,0,0,0,,${text}`);
     }
 

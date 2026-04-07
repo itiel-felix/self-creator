@@ -32,7 +32,8 @@ export const markVideoAsAnalyzed = async (searchWord: string, videoId: string) =
     const cachedData = JSON.parse(fs.readFileSync('./cache/youtube.json', 'utf8'));
     const entry = cachedData[searchWord].entries.find(entry => entry.id === videoId);
     if (entry) {
-        entry.hasBeenAnalyzed = true;
+        const modifiedEntry = { ...entry, hasBeenAnalyzed: true };
+        cachedData[searchWord].entries = cachedData[searchWord].entries.map(entry => entry.id === videoId ? modifiedEntry : entry);
         fs.writeFileSync('./cache/youtube.json', JSON.stringify(cachedData, null, 2));
     }
 }

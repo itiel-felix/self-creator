@@ -79,7 +79,13 @@ const initializeCache = (): void => {
     if (!fs.existsSync('./temp')) fs.mkdirSync('./temp');
     if (!fs.existsSync('./temp/youtube')) fs.mkdirSync('./temp/youtube');
     if (fs.existsSync('./cache/videoInfo')) fs.rmdirSync('./cache/videoInfo', { recursive: true });
+    // if (fs.existsSync('./cache/youtube.json')) fs.rmSync('./cache/youtube.json', { recursive: true });
     if (fs.existsSync('./output/subtitles.ass')) fs.rmSync('./output/subtitles.ass', { recursive: true });
+    if (fs.existsSync('./cache/mainIdeas.json')) fs.rmSync('./cache/mainIdeas.json', { recursive: true });
+    if (fs.existsSync('./cache/frame_info.json')) fs.rmSync('./cache/frame_info.json', { recursive: true });
+    // Delete brainrot
+    // if (fs.existsSync('./temp/brainrot')) fs.rmdirSync('./temp/brainrot', { recursive: true });
+
 }
 
 export {

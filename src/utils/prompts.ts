@@ -14,13 +14,14 @@ If sutbtitle lasts longer than 3.5 seconds, split it into two objects.
 ///// SEGMENT RULES //////
 
 1. Extract the text from each subtitle.
-2. Use the videogame name to fill "text" field.
-3. Each segment must:
+2. Ignore accents and special characters.
+3. Use the videogame name to fill "text" field.
+4. Each segment must:
 
    * be at least **0.5 seconds**
    * be at most **2 seconds**
-4. Use the original text to fill "original_text" field.
-4. Maintain the same videgoame name across all objects.
+5. Use the original text to fill "original_text" field.
+6. Maintain the same videgoame name across all objects.
 
 ///// OUTPUT FORMAT //////
 
@@ -413,6 +414,7 @@ export const searchQueriesSystemPrompt = (banned_terms: string[] = []): string =
     The search queries must HAVE TO contain the videogame name and must be generic enough to find videos on YouTube.
     The search queries must be in English.
     The search queries must be unique.
+    Ignore accents and special characters.
     ${banned_terms.length > 0 ? `Avoid these terms: ${banned_terms.join(', ')}, we already used them in the past.` : ''}
 
     INPUT

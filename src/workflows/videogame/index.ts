@@ -1,8 +1,8 @@
 import { getSearchQueries } from "../../services/deepSeek.service.js";
 import { getBannedTerms } from "./utils.js";
 import { searchVideosInYoutube } from "../../services/video.service.js";
-import { downloadYoutubeVideo, getMostWatchedSecond, HeatmapSegment } from "../../video/videoDownloader.js";
-import { selectFramesQueryForAVideo, extractFramesToDisk, writeVideoIdWithFrame } from "../../video/videoUtils.js";
+import { downloadYoutubeVideo, HeatmapSegment } from "../../video/videoDownloader.js";
+import { selectFramesQueryForAVideo, extractFramesToDisk, writeVideoIdWithFrame, getMostWatchedSecond, secondsToHMS } from "../../video/videoUtils.js";
 import { isThumbnailAcceptable } from "../../video/processThumbnails.js";
 import processStreamingFrames from "../../embeddings/processFrames.js";
 import fs from "fs";
@@ -19,9 +19,10 @@ const selectedVideos: { video_id: string; video_path: string; final_duration: nu
 export const getVideoGameVideos = async (videoGameName: string, _typeOfVideo?: string, videoDuration?: number): Promise<any[]> => {
     const banned_terms = await getBannedTerms();
     console.log('-> Getting search queries for video game name: ', videoGameName);
-    const { search_queries } = await getSearchQueries(videoGameName, banned_terms);
+    let { search_queries } = await getSearchQueries(videoGameName, banned_terms);
+    const usedSearchQueries: string[] = [...search_queries];
     console.log('-> Search queries: ', search_queries);
-    let maxVideos = 40;
+    let maxVideos = 20;
     let round = 1;
     let analyzedVideos: string[] = [];
     const randomTimes = generateRandomDurations(videoDuration ?? 0);
@@ -36,17 +37,24 @@ export const getVideoGameVideos = async (videoGameName: string, _typeOfVideo?: s
         while (selectedVideos.length < numberOfVideos) {
             const searchQuery = search_queries.shift();
             console.log('-> Searching videos for search query: ', searchQuery);
+            if (searchQuery == null) {
+                search_queries = await getSearchQueries(videoGameName, banned_terms);
+                usedSearchQueries.push(...search_queries);
+                break;
+            }
 
             const searchesVideos = await searchVideos({ searchQuery, maxVideos, round, analyzedVideos });
+            console.log('-> Searched videos found: ', searchesVideos.length);
             analyzedVideos = [...analyzedVideos, ...searchesVideos.map((video: any) => video.id ?? video.videoId)];
 
-            const [chunks_1, chunks_2, chunks_3, chunks_4] = separateArrayInChunks(searchesVideos, chunkSize);
+            const [chunks_1, chunks_2, chunks_3, chunks_4, chunks_5] = separateArrayInChunks(searchesVideos, chunkSize);
             const promises: Promise<void>[] = [];
 
             if (chunks_1?.length > 0) promises.push(processChunk(chunks_1, randomTimes, numberOfVideos, searchQuery, search_queries, chunkElement + 1));
             if (chunks_2?.length > 0) promises.push(processChunk(chunks_2, randomTimes, numberOfVideos, searchQuery, search_queries, chunkElement + 2));
             if (chunks_3?.length > 0) promises.push(processChunk(chunks_3, randomTimes, numberOfVideos, searchQuery, search_queries, chunkElement + 3));
             if (chunks_4?.length > 0) promises.push(processChunk(chunks_4, randomTimes, numberOfVideos, searchQuery, search_queries, chunkElement + 4));
+            if (chunks_5?.length > 0) promises.push(processChunk(chunks_5, randomTimes, numberOfVideos, searchQuery, search_queries, chunkElement + 5));
 
             await Promise.all(promises as Promise<void>[]);
             chunkElement += 3;
@@ -75,12 +83,6 @@ const getSeconds = (startTime: number, endTime: number) => {
     return (endTime - startTime) / 1000;
 }
 
-const secondsToHMS = (totalSeconds: number): string => {
-    const h = Math.floor(totalSeconds / 3600);
-    const m = Math.floor((totalSeconds % 3600) / 60);
-    const s = Math.floor(totalSeconds % 60);
-    return [h, m, s].map(v => v.toString().padStart(2, "0")).join(":");
-}
 
 const processVideo = async (video: any, comparePrompts: string[], indicator: number, logger: Logger, videoIndex: number): Promise<string | null> => {
     try {
@@ -99,7 +101,7 @@ const processVideo = async (video: any, comparePrompts: string[], indicator: num
         logger.info(`-> Chunk: ${indicator} - Video ${videoIndex} - mostWatchedSecond: ${mostWatchedSecond} | section: ${sectionStart}-${sectionEnd}`);
 
         const downloadStartTime = new Date().getTime();
-        const videoPath = await downloadYoutubeVideo({
+        let videoPath = await downloadYoutubeVideo({
             videoId: video.id,
             outputFolder: './temp/youtube',
             shouldReturnJSON: false,
@@ -115,6 +117,14 @@ const processVideo = async (video: any, comparePrompts: string[], indicator: num
         const sortingScores = scores.sort((a, b) => b[1] - a[1]);
         const [bestScoreName, bestScoreValue] = sortingScores?.[0];
         if (bestScoreValue >= parseFloat(process.env.THRESHOLD_SIMILARITY as string)) {
+            videoPath = await downloadYoutubeVideo({
+                videoId: video.id,
+                outputFolder: './temp/youtube',
+                shouldReturnJSON: false,
+                extraOptions: { format: "bv*[ext=mp4][height<=1080]" },
+                sectionToDownload: { start_time: sectionStart, end_time: sectionEnd },
+                forceDownload: true,
+            });
             await writeVideoIdWithFrame(video.id, bestScoreName);
             return videoPath as string;
         } else {
@@ -145,7 +155,7 @@ const processChunk = async (
     numberOfVideos: number,
     searchQuery: string,
     search_queries: string[],
-    indicator: number
+    indicator: number,
 ) => {
 
     const logger = new Logger(`${searchQuery}_${indicator.toString()}`);
@@ -157,7 +167,7 @@ const processChunk = async (
         }
         video.hasBeenAnalyzed = true;
         const videoPath = await processVideo(video, search_queries, indicator, logger, videoIndex + 1);
-        if (videoPath != null) {
+        if (videoPath != null && selectedVideos.length < numberOfVideos) {
             const clipLength = randomTimes[selectedVideos.length];
             selectedVideos.push({ video_id: video.id, video_path: videoPath, final_duration: clipLength });
             logger.info(`-> Video added to selected videos: ${video.id} ( ${selectedVideos.length} of ${numberOfVideos} )`);
@@ -170,7 +180,8 @@ const processChunk = async (
     logger.info(`-> Chunk: ${indicator} - CHUNK DONE - Videos selected: ${selectedVideos.length} of ${numberOfVideos}`);
 }
 
-const separateArrayInChunks = (array: any[], chunkSize: number) => {
+const separateArrayInChunks = (array: any[], numChunks: number) => {
+    const chunkSize = Math.ceil(array.length / numChunks);
     const chunks: any[][] = [];
     for (let i = 0; i < array.length; i += chunkSize) {
         chunks.push(array.slice(i, i + chunkSize));

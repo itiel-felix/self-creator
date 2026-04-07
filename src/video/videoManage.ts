@@ -140,19 +140,24 @@ const addAudioToVideo = async (videoPath: string, audioPath: string): Promise<st
     return videoPath;
 }
 
-export const cropVideoToDuration = async (videoPath: string, duration: number): Promise<string> => {
+export const cropVideoToDuration = async (videoPath: string, duration: number, speed: number = 1): Promise<string> => {
     const tempVideo = videoPath.replace(".mp4", "_temp.mp4");
     await new Promise<void>((resolve, reject) => {
-        ffmpeg(videoPath)
-            .setStartTime(0)
-            .setDuration(duration)
-            .save(tempVideo)
+        const cmd = ffmpeg(videoPath)
+            .setDuration(duration); // applied to output timeline (after speed filter)
+
+        if (speed !== 1) {
+            cmd.videoFilters(`setpts=${1 / speed}*PTS`);
+        }
+
+        cmd
             .outputOptions([
                 "-c:v", "libx264",
-                "-crf", "23",
-                "-preset", "ultrafast",
+                "-crf", "18",
+                "-preset", "slow",
                 "-an"
             ])
+            .save(tempVideo)
             .on("end", () => resolve())
             .on("error", reject);
     });

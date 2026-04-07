@@ -22,7 +22,7 @@
             "program": "${workspaceFolder}/index.ts",
             "args": [
                 "videogame",
-                "audio4.mp3"
+                "audio8.mp3"
             ],
             "console": "integratedTerminal"
         }

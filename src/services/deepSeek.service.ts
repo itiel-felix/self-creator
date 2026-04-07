@@ -9,6 +9,7 @@ export const getMainIdea = async (transcriptionOfAudioInSrtFormat: string, typeO
     try {
         const response = await openai.chat.completions.create({
             model: "deepseek-chat",
+            max_tokens: 8192,
             messages: [
                 { role: "system", content: mainIdeaSystemPrompt(typeOfVideo) },
                 { role: "user", content: transcriptionOfAudioInSrtFormat }
